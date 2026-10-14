@@ -8,5 +8,6 @@ publish = false
 agent-client-protocol = { version = "3", features = ["process"] }
 bitbot-protocol = { path = "../bitbot-protocol" }
 anyhow = "1"
+serde = "1"
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

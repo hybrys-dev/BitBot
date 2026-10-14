@@ -51,6 +51,18 @@ pub(crate) fn status_from_permission(request: &RequestPermissionRequest) -> Stat
         .with_action(action_from_update(&request.tool_call))
 }
 
+/// Collassa il testo su una riga, al massimo 120 caratteri.
+pub(crate) fn one_line(text: &str) -> String {
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut chars = flat.chars();
+    let short: String = chars.by_ref().take(120).collect();
+    if chars.next().is_some() {
+        format!("{short}…")
+    } else {
+        short
+    }
+}
+
 fn working(action: Option<Action>) -> Status {
     let status = Status::new(AGENT_NAME, AgentState::Working);
     match action {
