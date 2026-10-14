@@ -1,0 +1,11 @@
+[package]
+name = "bitbot-drivers"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+agent-client-protocol = { version = "3", features = ["process"] }
+anyhow = "1"
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
