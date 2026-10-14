@@ -171,6 +171,7 @@ dependencies = [
  "agent-client-protocol",
  "anyhow",
  "bitbot-protocol",
+ "serde",
  "serde_json",
  "tokio",
 ]
