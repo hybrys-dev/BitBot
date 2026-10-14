@@ -51,6 +51,15 @@ pub(crate) fn status_from_permission(request: &RequestPermissionRequest) -> Stat
         .with_action(action_from_update(&request.tool_call))
 }
 
+pub(crate) fn status_awaiting_reply(detail: &str) -> Status {
+    let detail = one_line(detail);
+    if detail.is_empty() {
+        Status::new(AGENT_NAME, AgentState::AwaitingReply)
+    } else {
+        Status::new(AGENT_NAME, AgentState::AwaitingReply).with_action(Action::other(detail))
+    }
+}
+
 /// Collassa il testo su una riga, al massimo 120 caratteri.
 pub(crate) fn one_line(text: &str) -> String {
     let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -241,6 +250,10 @@ mod tests {
         assert_eq!(
             status_from_permission(&permission).line(),
             "[opencode] in attesa di permesso · modifica src/lib.rs +8 −2"
+        );
+        assert_eq!(
+            status_awaiting_reply("domanda quale modello").line(),
+            "[opencode] in attesa di risposta · domanda quale modello"
         );
     }
 }
