@@ -1,14 +1,18 @@
-//! Client ACP per il primo spike: avvia OpenCode e legge le opzioni di sessione.
+//! Client ACP per il primo spike: avvia OpenCode, apre una sessione e segue un compito.
+
+mod status;
 
 use std::path::{Path, PathBuf};
 
 use agent_client_protocol::schema::v1::{
     AuthMethod, ClientCapabilities, Implementation, InitializeRequest, InitializeResponse,
-    SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory, SessionModeState,
+    RequestPermissionRequest, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
+    SessionModeState, SessionNotification,
 };
 use agent_client_protocol::schema::ProtocolVersion;
-use agent_client_protocol::{AcpAgent, AcpAgentConfig, Error, LineDirection};
+use agent_client_protocol::{AcpAgent, AcpAgentConfig, Error, LineDirection, SessionMessage};
 use anyhow::Context;
+use bitbot_protocol::{AgentState, Status};
 
 const CLIENT_NAME: &str = "bitbot-spike";
 
@@ -52,10 +56,22 @@ pub fn prepare_cwd(path: impl AsRef<Path>) -> anyhow::Result<PathBuf> {
     Ok(cwd)
 }
 
-/// Esegue `initialize` e `session/new` contro OpenCode, poi stampa il risultato.
-pub async fn run(cwd: impl AsRef<Path>) -> anyhow::Result<()> {
+/// Esegue `initialize`, `session/new` e `session/prompt` contro OpenCode.
+///
+/// Ogni aggiornamento viene stampato come stato unificato. Su
+/// `session/request_permission` stampa la riga e termina: la risposta è il passo successivo.
+pub async fn run(cwd: impl AsRef<Path>, task: &str) -> anyhow::Result<()> {
+    let task = task.trim();
+    if task.is_empty() {
+        anyhow::bail!("uso: bitbot-spike <cartella> <compito>");
+    }
     let cwd = prepare_cwd(cwd)?;
-    agent_client_protocol::Client
+    let task = task.to_string();
+    println!(
+        "{}",
+        Status::new(status::AGENT_NAME, AgentState::Starting).line()
+    );
+    let connected = agent_client_protocol::Client
         .builder()
         .name(CLIENT_NAME)
         .connect_with(opencode_agent(), async move |connection| {
@@ -74,18 +90,59 @@ pub async fn run(cwd: impl AsRef<Path>) -> anyhow::Result<()> {
             connection
                 .build_session(&cwd)
                 .block_task()
-                .run_until(async |session| {
+                .run_until(async |mut session| {
                     println!(
                         "{}",
                         format_session(session.config_options(), session.modes())
                     );
+                    session.send_prompt(&task)?;
+                    loop {
+                        match session.read_update().await? {
+                            SessionMessage::SessionMessage(dispatch) => {
+                                print_dispatch(dispatch).await?;
+                            }
+                            SessionMessage::StopReason(reason) => {
+                                println!("{}", status::status_from_stop(&reason).line());
+                                break;
+                            }
+                            _ => println!("{}", status::status_unknown().line()),
+                        }
+                    }
                     Ok(())
                 })
                 .await
         })
-        .await
-        .context("connessione con opencode acp interrotta")?;
+        .await;
+    if connected.is_err() {
+        println!(
+            "{}",
+            Status::new(status::AGENT_NAME, AgentState::Failed).line()
+        );
+    }
+    connected.context("connessione con opencode acp interrotta")?;
     Ok(())
+}
+
+async fn print_dispatch(dispatch: agent_client_protocol::Dispatch) -> Result<(), Error> {
+    agent_client_protocol::util::MatchDispatch::new(dispatch)
+        .if_request(async |request: RequestPermissionRequest, _responder| {
+            leave_for_permission(&request)
+        })
+        .await
+        .if_notification(async |notification: SessionNotification| {
+            println!(
+                "{}",
+                status::status_from_update(&notification.update).line()
+            );
+            Ok(())
+        })
+        .await
+        .otherwise_ignore()
+}
+
+fn leave_for_permission(request: &RequestPermissionRequest) -> Result<(), Error> {
+    println!("{}", status::status_from_permission(request).line());
+    std::process::exit(0);
 }
 
 /// Testo su stdout per la risposta di `initialize`.
