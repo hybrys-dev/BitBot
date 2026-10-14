@@ -1,6 +1,7 @@
 //! Client ACP per il primo spike: avvia OpenCode, apre una sessione e segue un compito.
 
 mod config_change;
+mod cursor;
 mod permission;
 mod sessions;
 mod status;
@@ -120,6 +121,7 @@ pub async fn run(cwd: impl AsRef<Path>, task: &str, resume: bool) -> anyhow::Res
         .builder()
         .name(CLIENT_NAME)
         .connect_with(opencode_agent(), async move |connection| {
+            let _cursor_extensions = connection.add_dynamic_handler(cursor::ExtensionHandler)?;
             let initialized = connection
                 .send_request(initialize_request())
                 .block_task()
@@ -428,6 +430,32 @@ async fn print_dispatch(
             }
         })
         .await
+        .if_request(async |request: cursor::AskQuestionRequest, responder| {
+            match cursor::answer_question(&request).await {
+                Ok(response) => responder.respond(response),
+                Err(error) => {
+                    println!("cursor/ask_question: {error}");
+                    responder.respond(cursor::cancelled_question())?;
+                    Err(error)
+                }
+            }
+        })
+        .await
+        .if_request(
+            async |request: cursor::CreatePlanRequest, responder| match cursor::answer_plan(
+                &request,
+            )
+            .await
+            {
+                Ok(response) => responder.respond(response),
+                Err(error) => {
+                    println!("cursor/create_plan: {error}");
+                    responder.respond(cursor::cancelled_plan())?;
+                    Err(error)
+                }
+            },
+        )
+        .await
         .if_notification(async |notification: SessionNotification| {
             record_update(&notification.update, watch_id, turn);
             println!(
@@ -437,7 +465,21 @@ async fn print_dispatch(
             Ok(())
         })
         .await
-        .otherwise_ignore()
+        .otherwise(async |dispatch| match dispatch {
+            Dispatch::Request(request, responder) if request.method().starts_with("cursor/") => {
+                println!(
+                    "{}",
+                    status::status_awaiting_reply(&format!("estensione {}", request.method()))
+                        .line()
+                );
+                responder.respond_with_internal_error(format!(
+                    "metodo non gestito: {}",
+                    request.method()
+                ))
+            }
+            _ => Ok(()),
+        })
+        .await
 }
 
 async fn answer_permission(
