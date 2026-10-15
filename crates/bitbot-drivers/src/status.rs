@@ -6,9 +6,7 @@ use agent_client_protocol::schema::v1::{
 };
 use bitbot_protocol::{Action, AgentState, Status};
 
-pub(crate) const AGENT_NAME: &str = "opencode";
-
-pub(crate) fn status_from_update(update: &SessionUpdate) -> Status {
+pub(crate) fn status_from_update(agent: &str, update: &SessionUpdate) -> Status {
     let action = match update {
         SessionUpdate::UserMessageChunk(chunk) | SessionUpdate::AgentMessageChunk(chunk) => {
             Some(message_action("messaggio", chunk))
@@ -28,14 +26,14 @@ pub(crate) fn status_from_update(update: &SessionUpdate) -> Status {
         }
         _ => Some(Action::other("aggiornamento")),
     };
-    working(action)
+    working(agent, action)
 }
 
-pub(crate) fn status_unknown() -> Status {
-    working(Some(Action::other("aggiornamento")))
+pub(crate) fn status_unknown(agent: &str) -> Status {
+    working(agent, Some(Action::other("aggiornamento")))
 }
 
-pub(crate) fn status_from_stop(reason: &StopReason) -> Status {
+pub(crate) fn status_from_stop(agent: &str, reason: &StopReason) -> Status {
     let state = match reason {
         StopReason::EndTurn | StopReason::Cancelled | StopReason::MaxTurnRequests => {
             AgentState::Finished
@@ -43,20 +41,20 @@ pub(crate) fn status_from_stop(reason: &StopReason) -> Status {
         StopReason::Refusal | StopReason::MaxTokens => AgentState::Failed,
         _ => AgentState::Failed,
     };
-    Status::new(AGENT_NAME, state)
+    Status::new(agent, state)
 }
 
-pub(crate) fn status_from_permission(request: &RequestPermissionRequest) -> Status {
-    Status::new(AGENT_NAME, AgentState::AwaitingPermission)
+pub(crate) fn status_from_permission(agent: &str, request: &RequestPermissionRequest) -> Status {
+    Status::new(agent, AgentState::AwaitingPermission)
         .with_action(action_from_update(&request.tool_call))
 }
 
-pub(crate) fn status_awaiting_reply(detail: &str) -> Status {
+pub(crate) fn status_awaiting_reply(agent: &str, detail: &str) -> Status {
     let detail = one_line(detail);
     if detail.is_empty() {
-        Status::new(AGENT_NAME, AgentState::AwaitingReply)
+        Status::new(agent, AgentState::AwaitingReply)
     } else {
-        Status::new(AGENT_NAME, AgentState::AwaitingReply).with_action(Action::other(detail))
+        Status::new(agent, AgentState::AwaitingReply).with_action(Action::other(detail))
     }
 }
 
@@ -72,8 +70,8 @@ pub(crate) fn one_line(text: &str) -> String {
     }
 }
 
-fn working(action: Option<Action>) -> Status {
-    let status = Status::new(AGENT_NAME, AgentState::Working);
+fn working(agent: &str, action: Option<Action>) -> Status {
+    let status = Status::new(agent, AgentState::Working);
     match action {
         Some(action) => status.with_action(action),
         None => status,
@@ -196,8 +194,21 @@ mod tests {
                 .content(vec![sample_diff().into()]),
         );
         assert_eq!(
-            status_from_update(&update).line(),
+            status_from_update("opencode", &update).line(),
             "[opencode] al lavoro · modifica src/lib.rs +8 −2"
+        );
+    }
+
+    #[test]
+    fn status_line_uses_the_profile_name() {
+        let update = SessionUpdate::ToolCall(
+            ToolCall::new("call-1", "Modifica")
+                .kind(ToolKind::Edit)
+                .content(vec![sample_diff().into()]),
+        );
+        assert_eq!(
+            status_from_update("cursor", &update).line(),
+            "[cursor] al lavoro · modifica src/lib.rs +8 −2"
         );
     }
 
@@ -209,14 +220,14 @@ mod tests {
                 .locations(vec![ToolCallLocation::new("Cargo.toml")]),
         );
         assert_eq!(
-            status_from_update(&read).line(),
+            status_from_update("opencode", &read).line(),
             "[opencode] al lavoro · lettura Cargo.toml"
         );
 
         let command =
             SessionUpdate::ToolCall(ToolCall::new("call-3", "cargo test").kind(ToolKind::Execute));
         assert_eq!(
-            status_from_update(&command).line(),
+            status_from_update("opencode", &command).line(),
             "[opencode] al lavoro · comando cargo test"
         );
 
@@ -224,16 +235,16 @@ mod tests {
             TextContent::new("fatto"),
         )));
         assert_eq!(
-            status_from_update(&message).line(),
+            status_from_update("opencode", &message).line(),
             "[opencode] al lavoro · messaggio fatto"
         );
 
         assert_eq!(
-            status_from_stop(&StopReason::EndTurn).line(),
+            status_from_stop("opencode", &StopReason::EndTurn).line(),
             "[opencode] finito"
         );
         assert_eq!(
-            status_from_stop(&StopReason::Refusal).line(),
+            status_from_stop("opencode", &StopReason::Refusal).line(),
             "[opencode] errore"
         );
 
@@ -248,11 +259,11 @@ mod tests {
             Vec::new(),
         );
         assert_eq!(
-            status_from_permission(&permission).line(),
+            status_from_permission("opencode", &permission).line(),
             "[opencode] in attesa di permesso · modifica src/lib.rs +8 −2"
         );
         assert_eq!(
-            status_awaiting_reply("domanda quale modello").line(),
+            status_awaiting_reply("opencode", "domanda quale modello").line(),
             "[opencode] in attesa di risposta · domanda quale modello"
         );
     }

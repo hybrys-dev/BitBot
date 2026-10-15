@@ -1,11 +1,14 @@
-//! Client ACP per il primo spike: avvia OpenCode, apre una sessione e segue un compito.
+//! Client ACP per il primo spike: avvia un agente, apre una sessione e segue un compito.
 
 mod config_change;
 mod cursor;
 mod permission;
+mod profile;
 mod sessions;
 mod status;
 mod terminal;
+
+pub use profile::AgentProfile;
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -27,7 +30,8 @@ use anyhow::Context;
 use bitbot_protocol::{AgentState, Status};
 
 const CLIENT_NAME: &str = "bitbot-spike";
-const USAGE: &str = "uso: bitbot-spike [--resume] <cartella> <compito>";
+const DEFAULT_AGENT: &str = "opencode";
+const USAGE: &str = "uso: bitbot-spike [--agent <nome>] [--resume] <cartella> <compito>";
 
 pub(crate) fn json_text(value: &impl serde::Serialize) -> String {
     match serde_json::to_value(value) {
@@ -41,11 +45,15 @@ pub(crate) fn json_text(value: &impl serde::Serialize) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invocation {
     pub resume: bool,
+    pub agent: String,
     pub cwd: String,
     pub task: String,
 }
 
-/// Legge `bitbot-spike [--resume] <cartella> <compito>`.
+/// Legge `bitbot-spike [--agent <nome>] [--resume] <cartella> <compito>`.
+///
+/// `--agent` e `--resume` stanno prima della cartella, in qualunque ordine.
+/// Senza `--agent` il profilo è `opencode`.
 pub fn parse_invocation<I, S>(args: I) -> anyhow::Result<Invocation>
 where
     I: IntoIterator<Item = S>,
@@ -55,17 +63,39 @@ where
         .into_iter()
         .map(|arg| arg.as_ref().to_string())
         .collect();
-    let (resume, rest) = match args.first().map(String::as_str) {
-        Some("--resume") => (true, &args[1..]),
-        Some(other) if other.starts_with("--") => anyhow::bail!(USAGE),
-        Some(_) => (false, args.as_slice()),
-        None => anyhow::bail!(USAGE),
-    };
+    let mut resume = false;
+    let mut agent = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--resume" => {
+                if resume {
+                    anyhow::bail!(USAGE);
+                }
+                resume = true;
+                index += 1;
+            }
+            "--agent" => {
+                if agent.is_some() {
+                    anyhow::bail!(USAGE);
+                }
+                let Some(name) = args.get(index + 1).filter(|name| !name.starts_with("--")) else {
+                    anyhow::bail!(USAGE);
+                };
+                agent = Some(name.clone());
+                index += 2;
+            }
+            other if other.starts_with("--") => anyhow::bail!(USAGE),
+            _ => break,
+        }
+    }
+    let rest = &args[index..];
     if rest.len() < 2 || rest[1..].join(" ").trim().is_empty() {
         anyhow::bail!(USAGE);
     }
     Ok(Invocation {
         resume,
+        agent: agent.unwrap_or_else(|| DEFAULT_AGENT.to_string()),
         cwd: rest[0].clone(),
         task: rest[1..].join(" "),
     })
@@ -78,12 +108,18 @@ pub fn initialize_request() -> InitializeRequest {
         .client_info(Implementation::new(CLIENT_NAME, env!("CARGO_PKG_VERSION")))
 }
 
-/// Avvia `opencode acp` come processo figlio.
+/// Avvia l'agente del profilo come processo figlio.
 ///
 /// Stdin e stdout restano il trasporto JSON-RPC. Lo stderr del figlio viene
-/// inoltrato sullo stderr di questo processo.
-fn opencode_agent() -> AcpAgent {
-    AcpAgent::new(AcpAgentConfig::new("opencode").arg("acp")).with_debug(|line, direction| {
+/// inoltrato sullo stderr di questo processo. L'ambiente del profilo si aggiunge
+/// a quello ereditato: una mappa vuota lascia il processo come prima.
+fn spawn_agent(profile: &AgentProfile) -> AcpAgent {
+    AcpAgent::new(
+        AcpAgentConfig::new(profile.command.as_str())
+            .args(profile.args.clone())
+            .envs(profile.env.clone()),
+    )
+    .with_debug(|line, direction| {
         if direction == LineDirection::Stderr {
             eprintln!("{line}");
         }
@@ -101,27 +137,43 @@ pub fn prepare_cwd(path: impl AsRef<Path>) -> anyhow::Result<PathBuf> {
     Ok(cwd)
 }
 
-/// Esegue lo spike contro OpenCode.
+/// Esegue lo spike contro il profilo scelto.
 ///
 /// Senza `resume` apre una sessione, esegue il compito, cambia effort o modello
 /// e manda un secondo prompt. Con `resume` chiude il ciclo precedente: elenca
 /// le sessioni della cartella e le riprende con `session/resume` o `session/load`.
-pub async fn run(cwd: impl AsRef<Path>, task: &str, resume: bool) -> anyhow::Result<()> {
+pub async fn run(
+    agent: &str,
+    cwd: impl AsRef<Path>,
+    task: &str,
+    resume: bool,
+) -> anyhow::Result<()> {
     let task = task.trim();
     if task.is_empty() {
         anyhow::bail!(USAGE);
     }
+    let profile = AgentProfile::resolve(agent)?;
     let cwd = prepare_cwd(cwd)?;
     let task = task.to_string();
-    println!(
-        "{}",
-        Status::new(status::AGENT_NAME, AgentState::Starting).line()
-    );
+    let agent_name = profile.name.clone();
+    let session_agent = agent_name.clone();
+    let use_cursor = profile.uses_cursor_extensions();
+    println!("{}", Status::new(&agent_name, AgentState::Starting).line());
     let connected = agent_client_protocol::Client
         .builder()
         .name(CLIENT_NAME)
-        .connect_with(opencode_agent(), async move |connection| {
-            let _cursor_extensions = connection.add_dynamic_handler(cursor::ExtensionHandler)?;
+        .connect_with(spawn_agent(&profile), async move |connection| {
+            // Il guard deve vivere per tutta la connessione: se scade prima,
+            // le richieste senza sessionId restano senza risposta.
+            let _cursor_extensions = if use_cursor {
+                Some(
+                    connection.add_dynamic_handler(cursor::ExtensionHandler::new(
+                        session_agent.clone(),
+                    ))?,
+                )
+            } else {
+                None
+            };
             let initialized = connection
                 .send_request(initialize_request())
                 .block_task()
@@ -134,23 +186,25 @@ pub async fn run(cwd: impl AsRef<Path>, task: &str, resume: bool) -> anyhow::Res
             }
             println!("{}", format_initialize(&initialized));
             if resume {
-                run_resume(&connection, &initialized, &cwd, &task).await
+                run_resume(&connection, &initialized, &cwd, &task, &session_agent).await
             } else {
-                run_new(&connection, &cwd, &task).await
+                run_new(&connection, &cwd, &task, &session_agent).await
             }
         })
         .await;
     if connected.is_err() {
-        println!(
-            "{}",
-            Status::new(status::AGENT_NAME, AgentState::Failed).line()
-        );
+        println!("{}", Status::new(&agent_name, AgentState::Failed).line());
     }
-    connected.context("connessione con opencode acp interrotta")?;
+    connected.context(format!("connessione con {agent_name} interrotta"))?;
     Ok(())
 }
 
-async fn run_new<Link>(connection: &ConnectionTo<Link>, cwd: &Path, task: &str) -> Result<(), Error>
+async fn run_new<Link>(
+    connection: &ConnectionTo<Link>,
+    cwd: &Path,
+    task: &str,
+    agent: &str,
+) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
 {
@@ -163,8 +217,8 @@ where
                 "{}",
                 format_session(session.config_options(), session.modes())
             );
-            let first = drive_turn(&mut session, task, None).await?;
-            apply_config_change(&mut session, first.config_options.as_deref()).await
+            let first = drive_turn(&mut session, task, None, agent).await?;
+            apply_config_change(&mut session, first.config_options.as_deref(), agent).await
         })
         .await
 }
@@ -174,6 +228,7 @@ async fn run_resume<Link>(
     initialized: &InitializeResponse,
     cwd: &Path,
     task: &str,
+    agent: &str,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -212,7 +267,7 @@ where
             .await?
             .into_session(),
     };
-    prompt_restored(session, task).await
+    prompt_restored(session, task, agent).await
 }
 
 async fn list_sessions<Link>(
@@ -244,6 +299,7 @@ where
 async fn prompt_restored<Link>(
     mut session: ActiveSession<'_, Link>,
     task: &str,
+    agent: &str,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -252,8 +308,8 @@ where
         "{}",
         format_session(session.config_options(), session.modes())
     );
-    show_restored_conversation(&mut session).await?;
-    drive_turn(&mut session, task, None).await?;
+    show_restored_conversation(&mut session, agent).await?;
+    drive_turn(&mut session, task, None, agent).await?;
     Ok(())
 }
 
@@ -266,6 +322,7 @@ const RESTORE_LIMIT: usize = 256;
 /// replay in coda prima della risposta, quindi è già pronto.
 async fn show_restored_conversation<Link>(
     session: &mut ActiveSession<'_, Link>,
+    agent: &str,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -279,15 +336,15 @@ where
         }
         match next_ready(session)? {
             Some(SessionMessage::SessionMessage(dispatch)) => {
-                print_dispatch(dispatch, None, &mut turn).await?;
+                print_dispatch(dispatch, None, &mut turn, agent).await?;
                 restored += 1;
             }
             Some(SessionMessage::StopReason(reason)) => {
-                println!("{}", status::status_from_stop(&reason).line());
+                println!("{}", status::status_from_stop(agent, &reason).line());
                 restored += 1;
             }
             Some(_) => {
-                println!("{}", status::status_unknown().line());
+                println!("{}", status::status_unknown(agent).line());
                 restored += 1;
             }
             None => break,
@@ -333,6 +390,7 @@ async fn drive_turn<Link>(
     session: &mut ActiveSession<'_, Link>,
     task: &str,
     watch_id: Option<&str>,
+    agent: &str,
 ) -> Result<TurnRecord, Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -342,13 +400,13 @@ where
     loop {
         match session.read_update().await? {
             SessionMessage::SessionMessage(dispatch) => {
-                print_dispatch(dispatch, watch_id, &mut turn).await?;
+                print_dispatch(dispatch, watch_id, &mut turn, agent).await?;
             }
             SessionMessage::StopReason(reason) => {
-                println!("{}", status::status_from_stop(&reason).line());
+                println!("{}", status::status_from_stop(agent, &reason).line());
                 break;
             }
-            _ => println!("{}", status::status_unknown().line()),
+            _ => println!("{}", status::status_unknown(agent).line()),
         }
     }
     Ok(turn)
@@ -357,6 +415,7 @@ where
 async fn apply_config_change<Link>(
     session: &mut ActiveSession<'_, Link>,
     declared: Option<&[SessionConfigOption]>,
+    agent: &str,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -391,6 +450,7 @@ where
         session,
         config_change::verification_prompt(),
         Some(&change.id),
+        agent,
     )
     .await?;
     let reply = status::one_line(&turn.agent_text);
@@ -417,10 +477,11 @@ async fn print_dispatch(
     dispatch: Dispatch,
     watch_id: Option<&str>,
     turn: &mut TurnRecord,
+    agent: &str,
 ) -> Result<(), Error> {
     agent_client_protocol::util::MatchDispatch::new(dispatch)
         .if_request(async |request: RequestPermissionRequest, responder| {
-            match answer_permission(&request).await {
+            match answer_permission(agent, &request).await {
                 Ok(response) => responder.respond(response),
                 Err(error) => {
                     println!("{error}");
@@ -431,7 +492,7 @@ async fn print_dispatch(
         })
         .await
         .if_request(async |request: cursor::AskQuestionRequest, responder| {
-            match cursor::answer_question(&request).await {
+            match cursor::answer_question(agent, &request).await {
                 Ok(response) => responder.respond(response),
                 Err(error) => {
                     println!("cursor/ask_question: {error}");
@@ -443,7 +504,7 @@ async fn print_dispatch(
         .await
         .if_request(
             async |request: cursor::CreatePlanRequest, responder| match cursor::answer_plan(
-                &request,
+                agent, &request,
             )
             .await
             {
@@ -460,7 +521,7 @@ async fn print_dispatch(
             record_update(&notification.update, watch_id, turn);
             println!(
                 "{}",
-                status::status_from_update(&notification.update).line()
+                status::status_from_update(agent, &notification.update).line()
             );
             Ok(())
         })
@@ -469,8 +530,11 @@ async fn print_dispatch(
             Dispatch::Request(request, responder) if request.method().starts_with("cursor/") => {
                 println!(
                     "{}",
-                    status::status_awaiting_reply(&format!("estensione {}", request.method()))
-                        .line()
+                    status::status_awaiting_reply(
+                        agent,
+                        &format!("estensione {}", request.method())
+                    )
+                    .line()
                 );
                 responder.respond_with_internal_error(format!(
                     "metodo non gestito: {}",
@@ -483,9 +547,10 @@ async fn print_dispatch(
 }
 
 async fn answer_permission(
+    agent: &str,
     request: &RequestPermissionRequest,
 ) -> Result<agent_client_protocol::schema::v1::RequestPermissionResponse, Error> {
-    println!("{}", status::status_from_permission(request).line());
+    println!("{}", status::status_from_permission(agent, request).line());
     terminal::require_terminal("chiedere il permesso")?;
     if request.options.is_empty() {
         return Err(terminal::acp_error(
@@ -771,13 +836,45 @@ mod tests {
     fn parses_a_new_session_and_a_resume() {
         let created = parse_invocation(["/tmp/proj", "aggiungi", "un test"]).unwrap();
         assert!(!created.resume);
+        assert_eq!(created.agent, "opencode");
         assert_eq!(created.cwd, "/tmp/proj");
         assert_eq!(created.task, "aggiungi un test");
 
         let resumed = parse_invocation(["--resume", "/tmp/proj", "continua"]).unwrap();
         assert!(resumed.resume);
+        assert_eq!(resumed.agent, "opencode");
         assert_eq!(resumed.task, "continua");
         assert!(parse_invocation(["--resume", "/tmp/proj"]).is_err());
         assert!(parse_invocation(["--altro", "/tmp/proj", "x"]).is_err());
+    }
+
+    #[test]
+    fn parses_agent_before_the_folder() {
+        let cursor = parse_invocation(["--agent", "cursor", "/tmp/proj", "fai"]).unwrap();
+        assert_eq!(cursor.agent, "cursor");
+        assert!(!cursor.resume);
+        assert_eq!(cursor.cwd, "/tmp/proj");
+        assert_eq!(cursor.task, "fai");
+
+        let resume_first =
+            parse_invocation(["--resume", "--agent", "cursor", "/tmp/proj", "continua"]).unwrap();
+        assert!(resume_first.resume);
+        assert_eq!(resume_first.agent, "cursor");
+        assert_eq!(resume_first.cwd, "/tmp/proj");
+        assert_eq!(resume_first.task, "continua");
+
+        let agent_first =
+            parse_invocation(["--agent", "cursor", "--resume", "/tmp/proj", "continua"]).unwrap();
+        assert!(agent_first.resume);
+        assert_eq!(agent_first.agent, "cursor");
+        assert_eq!(agent_first.task, "continua");
+
+        assert!(parse_invocation(["--agent"]).is_err());
+        assert!(parse_invocation(["--agent", "--resume", "/tmp/proj", "x"]).is_err());
+        assert!(
+            parse_invocation(["--agent", "cursor", "--agent", "opencode", "/tmp/proj", "x"])
+                .is_err()
+        );
+        assert!(parse_invocation(["--resume", "--resume", "/tmp/proj", "x"]).is_err());
     }
 }
