@@ -1,0 +1,12 @@
+---
+description: Regole per bitbot-protocol, i tipi condivisi tra driver, demone e interfacce
+globs: crates/bitbot-protocol/**
+alwaysApply: false
+---
+
+# bitbot-protocol
+
+- Solo tipi e logica pura: nessun I/O e nessuna dipendenza da tokio o dagli altri crate di BitBot.
+- Oggi il crate non ha dipendenze. `serde`, `ts-rs` e simili si aggiungono solo quando l'API del demone li richiede, con una decisione nel piano.
+- Cambiare `AgentState` o `ActionKind` tocca driver, interfaccia e piano: aggiorna la sezione «Modello di stato unificato» di `docs/PLAN.md` nella stessa PR.
+- Se cambi un'etichetta mostrata all'utente (`label()`), aggiorna i test che la confrontano.

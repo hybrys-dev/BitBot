@@ -1,0 +1,16 @@
+---
+description: Convenzioni Rust del workspace BitBot
+globs: crates/**/*.rs, crates/**/Cargo.toml
+alwaysApply: false
+---
+
+# Convenzioni Rust
+
+- Edizione 2021, un solo workspace in radice, crate con `publish = false`.
+- Async con tokio. Nessuna chiamata bloccante dentro una funzione async.
+- Errori con `anyhow::Result` e `.context(...)` in italiano, come nel codice esistente. Niente `unwrap()` né `expect()` fuori dai test. Altre librerie per gli errori vanno discusse.
+- Visibilità minima: `pub(crate)` per ciò che serve solo al crate, `pub` solo per l'API usata da binari o altri crate.
+- Test unitari in un `#[cfg(test)] mod tests` in fondo al modulo. Testa funzioni pure; i flussi completi si testano con un agente finto, mai con un agente reale nei test automatici.
+- Codice specifico per sistema operativo dietro `#[cfg(...)]`, sempre con un ripiego per gli altri sistemi.
+- Nessuna nuova dipendenza senza una decisione nel piano. Se serve, proponila nella PR e spiega perché.
+- I commenti `///` spiegano il perché, in italiano. Gli identificatori e i nomi dei test restano in inglese.

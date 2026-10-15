@@ -1,0 +1,16 @@
+---
+description: Regole per i driver degli agenti e il client ACP in bitbot-drivers
+globs: crates/bitbot-drivers/**
+alwaysApply: false
+---
+
+# Driver degli agenti (ACP)
+
+- Il client dichiara capacità minime in `initialize`: niente `fs` né `terminal`, così gli agenti usano i propri strumenti. Cambiarlo richiede una decisione nel piano.
+- La versione del protocollo si negozia in `initialize`: se l'agente risponde con una versione non supportata, esci con un errore esplicito.
+- I selettori di modello, effort e modalità nascono dalle opzioni che l'agente dichiara (categorie `model`, `thought_level`, `mode`), con ripiego su `modes`. Mai liste di modelli scritte a mano.
+- Ogni richiesta dell'agente (`session/request_permission`, `cursor/ask_question`, `cursor/create_plan`) riceve una risposta. Se non si può chiedere all'utente, rispondi `cancelled`.
+- Le stranezze di un agente stanno in un modulo o in un profilo dedicato (come `cursor.rs`), mai in `if` sul nome dell'agente nel codice generico.
+- Lo stderr dell'agente resta separato dal trasporto JSON-RPC su stdin e stdout.
+- Ogni evento dell'agente diventa uno `Status` di `bitbot-protocol`: non inventare stati locali.
+- Quando osservi una differenza di comportamento tra agenti, annotala in una tabella in `docs/`: è un criterio di completamento della Fase 0.
