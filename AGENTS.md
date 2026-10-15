@@ -4,10 +4,12 @@ Companion desktop che pilota agenti di coding (Claude Code, Codex, OpenCode, Cur
 Il piano completo è in `docs/PLAN.md`: leggi la sezione pertinente prima di pianificare un compito.
 
 ## Stato attuale
-- Fase 0, Fondamenta. Esiste solo uno spike ACP che pilota OpenCode (`crates/bitbot-drivers`) e il crate dello stato unificato (`crates/bitbot-protocol`).
-- Lo spike non è mai stato eseguito contro un agente reale e non c'è ancora una CI: non scrivere che qualcosa funziona se non è stato provato.
+- Fase 0, Fondamenta. Lo spike ACP (`crates/bitbot-drivers`) pilota OpenCode e Cursor da profili; il crate dello stato unificato è `crates/bitbot-protocol`.
+- Provato contro agenti reali su Linux il 16 ottobre 2026: sessione nuova, permessi, cambio di configurazione e ripresa. Le differenze osservate sono in `docs/osservazioni-spike.md`.
+- Mancano ancora: profili e corse per Codex e Claude Code, estensioni di Cursor mai scattate, corse su macOS e Windows.
+- La CI gira su Linux, macOS e Windows dal 15 ottobre 2026 (fmt, clippy, test).
 - Non esistono ancora demone, interfaccia, gateway LLM e integrazioni.
-- Aggiorna questa sezione quando un cancello della roadmap viene superato.
+- Aggiorna questa sezione quando un cancello della roadmap viene superato. Non scrivere che qualcosa funziona se non è stato provato.
 
 ## Principi non negoziabili
 - Il demone `bitbotd` possiede processi, stato e chiavi; UI e CLI sono solo client.
