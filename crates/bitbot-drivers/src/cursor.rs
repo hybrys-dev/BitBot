@@ -127,6 +127,7 @@ enum PlanOutcome {
 }
 
 pub(crate) async fn answer_question(
+    agent: &str,
     request: &AskQuestionRequest,
 ) -> Result<AskQuestionResponse, agent_client_protocol::Error> {
     let detail = request
@@ -134,7 +135,7 @@ pub(crate) async fn answer_question(
         .first()
         .map(|question| format!("domanda {}", question.prompt))
         .unwrap_or_else(|| "domanda".to_string());
-    println!("{}", status::status_awaiting_reply(&detail).line());
+    println!("{}", status::status_awaiting_reply(agent, &detail).line());
     println!("chiamata: {}", request.tool_call_id);
     require_terminal("fare la domanda")?;
     if request.questions.is_empty() {
@@ -192,6 +193,7 @@ pub(crate) async fn answer_question(
 }
 
 pub(crate) async fn answer_plan(
+    agent: &str,
     request: &CreatePlanRequest,
 ) -> Result<CreatePlanResponse, agent_client_protocol::Error> {
     let detail = request
@@ -202,7 +204,7 @@ pub(crate) async fn answer_plan(
         .unwrap_or("piano");
     println!(
         "{}",
-        status::status_awaiting_reply(&format!("piano {detail}")).line()
+        status::status_awaiting_reply(agent, &format!("piano {detail}")).line()
     );
     println!("chiamata: {}", request.tool_call_id);
     require_terminal("chiedere l'approvazione del piano")?;
@@ -319,7 +321,17 @@ pub(crate) fn claim_extension(method: &str, has_session_id: bool) -> bool {
         && (AskQuestionRequest::matches_method(method) || CreatePlanRequest::matches_method(method))
 }
 
-pub(crate) struct ExtensionHandler;
+pub(crate) struct ExtensionHandler {
+    agent: String,
+}
+
+impl ExtensionHandler {
+    pub(crate) fn new(agent: impl Into<String>) -> Self {
+        Self {
+            agent: agent.into(),
+        }
+    }
+}
 
 impl<Counterpart: Role> HandleDispatchFrom<Counterpart> for ExtensionHandler {
     async fn handle_dispatch_from(
@@ -333,12 +345,14 @@ impl<Counterpart: Role> HandleDispatchFrom<Counterpart> for ExtensionHandler {
                 retry: false,
             });
         }
+        let agent = self.agent.clone();
         let ask = connection.clone();
         let plan = connection;
         MatchDispatch::new(message)
             .if_request(async |request: AskQuestionRequest, responder| {
+                let agent = agent.clone();
                 ask.spawn(async move {
-                    let response = match answer_question(&request).await {
+                    let response = match answer_question(&agent, &request).await {
                         Ok(response) => response,
                         Err(error) => {
                             println!("cursor/ask_question: {error}");
@@ -351,8 +365,9 @@ impl<Counterpart: Role> HandleDispatchFrom<Counterpart> for ExtensionHandler {
             })
             .await
             .if_request(async |request: CreatePlanRequest, responder| {
+                let agent = agent.clone();
                 plan.spawn(async move {
-                    let response = match answer_plan(&request).await {
+                    let response = match answer_plan(&agent, &request).await {
                         Ok(response) => response,
                         Err(error) => {
                             println!("cursor/create_plan: {error}");
