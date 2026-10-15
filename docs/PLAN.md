@@ -1,12 +1,14 @@
 # BitBot — Piano di progetto
 
-Oct 14, 2026 · @Nicolò Torta
+Ultimo aggiornamento: 15 ottobre 2026.
+
+> Documento di riferimento del progetto, per persone e agenti. La fase in corso è indicata in `AGENTS.md`.
 
 ## Sintesi
 
-BitBot è un companion desktop che riunisce i tuoi agenti di coding (Claude Code, Codex, OpenCode, Cursor, OpenClaw, Hermes) e una chat con qualsiasi LLM. Ti mostra con un'occhiata cosa stanno facendo, senza aprire niente: è questo il momento magico da cui dipende tutto il resto.
+BitBot è un companion desktop che riunisce gli agenti di coding dell'utente (Claude Code, Codex, OpenCode, Cursor, OpenClaw, Hermes) e una chat con qualsiasi LLM. Mostra con un'occhiata cosa stanno facendo, senza aprire niente: è questo il momento magico da cui dipende tutto il resto.
 
-A differenza di Coucou, che si aggancia agli agenti avviati nel terminale tramite hook, BitBot li pilota. Scegli agente, modello, effort, progetto e sessione; BitBot avvia, riprende e supervisiona. L'osservazione delle sessioni avviate a mano arriva in una fase successiva.
+A differenza di Coucou, che si aggancia agli agenti avviati nel terminale tramite hook, BitBot li pilota. L'utente sceglie agente, modello, effort, progetto e sessione; BitBot avvia, riprende e supervisiona. L'osservazione delle sessioni avviate a mano arriva in una fase successiva.
 
 Proposta di identità: il prodotto si chiama BitBot, il personaggio pixel-art che lo rappresenta si chiama Bit.
 
@@ -21,7 +23,7 @@ Principi guida:
 
 ## Decisioni prese
 
-Le risposte fissano il perimetro: uso personale ora e open source poi, quattro agenti via ACP nell'MVP, tutte le piattaforme da subito.
+Il perimetro: uso personale ora e open source poi, quattro agenti via ACP nell'MVP, tutte le piattaforme da subito.
 
 | Area | Decisione |
 | --- | --- |
@@ -55,9 +57,38 @@ Le risposte fissano il perimetro: uso personale ora e open source poi, quattro a
 
 BitBot è un demone che possiede processi, chiavi e stato, più interfacce leggere che lo comandano: chiudere la finestra non ferma nulla.
 
-&#91;embedded content: architettura di BitBot · tre livelli, demone al centro\]
+```mermaid
+flowchart TB
+    subgraph UI["Interfacce: client del demone"]
+        APP["App desktop Tauri<br/>isola, Bit, cockpit"]
+        CLI["CLI bitbot<br/>status, toggle, open, chat"]
+        TEL["Telefono, in futuro<br/>stessa API su WebSocket e TLS"]
+    end
 
-Interfaccia e CLI non parlano mai direttamente con agenti o provider: chiedono al demone. Per questo le sessioni sopravvivono alla chiusura della finestra, e un domani il telefono userà la stessa API.
+    subgraph D["bitbotd, il demone sempre acceso"]
+        DRV["Driver agenti<br/>ACP e protocolli nativi, trasporti locali e remoti"]
+        SES["Gestore sessioni<br/>stato unificato, supervisione dei processi"]
+        PERM["Motore permessi<br/>blocchi, regole, auto-approvazione, registro"]
+        LLM["Gateway LLM<br/>genai, catalogo, costi, MCP e ricerca web"]
+        INT["Integrazioni<br/>GitHub, Forgejo, Gitea, Stripe, Vercel e altri"]
+        DATI["Dati e chiavi<br/>SQLite con FTS5, portachiavi di sistema"]
+    end
+
+    LOC["Agenti locali<br/>Claude Code, Codex, OpenCode, Cursor"]
+    REM["Agenti remoti<br/>OpenClaw, Hermes, qualsiasi ACP via SSH"]
+    MAN["Sessioni avviate a mano<br/>hook e plugin degli agenti"]
+    PROV["Provider e servizi<br/>API LLM, server MCP, API delle integrazioni"]
+
+    APP -->|"JSON-RPC 2.0 su socket locale"| D
+    CLI --> D
+    TEL -.-> D
+    D -->|"stdio o PTY"| LOC
+    D -->|"SSH, VPN o WSS"| REM
+    MAN -.->|"bitbot-hook"| D
+    D -->|"HTTPS"| PROV
+```
+
+Interfaccia e CLI non parlano mai direttamente con agenti o provider: chiedono al demone. Per questo le sessioni sopravvivono alla chiusura della finestra, e un domani il telefono userà la stessa API. Le linee tratteggiate indicano parti che arrivano dopo l'MVP; ogni freccia parte da chi avvia la comunicazione.
 
 ### Modello di stato unificato
 
@@ -73,8 +104,8 @@ Ogni driver traduce gli eventi del suo agente in questi stati. La vista ridotta 
 
 ### Flussi principali
 
-1. **Nuova sessione**: scegli progetto e preset dal cockpit o dal composer rapido. Il demone crea il worktree se richiesto, avvia il driver nella cartella giusta, e la pillola compare nell'isola.
-2. **Permesso**: l'agente chiede e il motore permessi decide tra blocco, regola, auto-approvazione o domanda. Se serve te, la scheda compare nell'isola e Bit lo segnala; la risposta torna all'agente.
+1. **Nuova sessione**: l'utente sceglie progetto e preset dal cockpit o dal composer rapido. Il demone crea il worktree se richiesto, avvia il driver nella cartella giusta, e la pillola compare nell'isola.
+2. **Permesso**: l'agente chiede e il motore permessi decide tra blocco, regola, auto-approvazione o domanda. Se serve l'utente, la scheda compare nell'isola e Bit lo segnala; la risposta torna all'agente.
 3. **Ripresa**: al riavvio il demone rilegge dall'indice le sessioni attive e le riprende con il metodo che ogni agente supporta.
 
 ## Strato agenti
@@ -100,7 +131,7 @@ Claude Code richiede attenzione. [Anthropic non consente](https://code.claude.co
 
 - **Via ACP**, Claude Code gira con API key o con un provider cloud (Bedrock, Vertex, Foundry).
 - **Con l'abbonamento**, BitBot apre la CLI ufficiale `claude` nel terminale gestito, con il modello scelto passato all'avvio, e la segue tramite hook come fa Coucou.
-- **Nella fase personale**, prima di usare l'abbonamento attraverso l'SDK, verifica i termini di Anthropic in vigore.
+- **Nella fase personale**, prima di usare l'abbonamento attraverso l'SDK, vanno verificati i termini di Anthropic in vigore.
 
 ### Trasporti
 
@@ -129,7 +160,7 @@ BitBot disegna i selettori da questa lista e mostra i livelli di effort nativi. 
 
 Spostare una sessione, per esempio da Claude Code a Codex, crea un pacchetto di passaggio:
 
-1. Un riassunto della conversazione, generato dal gateway LLM con un modello a tua scelta.
+1. Un riassunto della conversazione, generato dal gateway LLM con un modello scelto dall'utente.
 2. Lo stato git: branch, file modificati, modifiche non committate.
 3. Piano e todo aperti, ultima richiesta dell'utente.
 4. La trascrizione completa come allegato, se l'agente di destinazione accetta risorse.
@@ -153,7 +184,7 @@ La chat passa da un gateway dentro il demone che parla con qualsiasi provider. L
 ### Provider
 
 - **Base: `genai`.** Supporta in modo nativo OpenAI (anche Responses), Anthropic, Gemini, Ollama, Vertex, Bedrock, OpenRouter, xAI, DeepSeek, Groq e altri, con streaming e livelli di ragionamento.
-- **Endpoint OpenAI-compatibili personalizzati**: qualsiasi base URL con chiave, per LM Studio, llama.cpp, vLLM, LiteLLM o gateway tuoi. È questo che rende vero il "tutte le API".
+- **Endpoint OpenAI-compatibili personalizzati**: qualsiasi base URL con chiave, per LM Studio, llama.cpp, vLLM, LiteLLM o gateway propri. È questo che rende vero il "tutte le API".
 - **Uno strato sottile sopra la libreria**: BitBot definisce un proprio trait `Provider`. Se `genai` non basta per un caso, si scrive un adattatore a mano senza toccare il resto.
 - **Ordine**: nell'MVP OpenAI-compatibile più Anthropic; poi Gemini nativo; Bedrock, Vertex e Azure in seguito, dove il lavoro vero è l'autenticazione cloud.
 - **Confine netto**: la chat non riusa mai i token di login degli agenti, solo chiavi configurate in BitBot.
@@ -178,9 +209,9 @@ La chat passa da un gateway dentro il demone che parla con qualsiasi provider. L
 
 Un pulsante "Fallo" trasforma la conversazione in una sessione agente:
 
-1. Scegli progetto e preset (agente, modello, effort) o accetti quelli suggeriti.
+1. L'utente sceglie progetto e preset (agente, modello, effort) o accetta quelli suggeriti.
 2. Il gateway scrive un prompt operativo dalla conversazione: obiettivo, vincoli, file citati, criterio di completamento.
-3. Correggi il prompt se serve; la sessione parte e compare subito nella vista ridotta.
+3. L'utente corregge il prompt se serve; la sessione parte e compare subito nella vista ridotta.
 
 ### Chiavi del gateway passate agli agenti
 
@@ -193,10 +224,10 @@ Tutto lo stato di BitBot vive in un database SQLite locale gestito dal demone; l
 ### Progetti
 
 - **Aggiunta**: a mano scegliendo una cartella, oppure importando le cartelle che compaiono nella cronologia degli agenti.
-- **Dalle forge**: elenco dei tuoi repository su GitHub, Forgejo e Gitea tramite token personale, poi clonazione. Forgejo e Gitea condividono la stessa API, quindi è un solo adattatore.
+- **Dalle forge**: elenco dei repository dell'utente su GitHub, Forgejo e Gitea tramite token personale, poi clonazione. Forgejo e Gitea condividono la stessa API, quindi è un solo adattatore.
 - **Git**: clonazione e worktree passano dal `git` di sistema, che rispetta chiavi SSH e credential helper; le letture veloci di stato usano una libreria Rust come `gix`.
 - **Collegamento al remoto**: BitBot legge `origin` e associa il progetto alla sua forge, così PR e CI compaiono nelle integrazioni.
-- **Impostazioni per progetto**: preset predefinito, regole di permesso, politica dei worktree. Salvate in locale, esportabili in un file `bitbot.toml` se un giorno vuoi condividerle.
+- **Impostazioni per progetto**: preset predefinito, regole di permesso, politica dei worktree. Salvate in locale, esportabili in un file `bitbot.toml` per condividerle.
 
 ### Worktree
 
@@ -225,10 +256,10 @@ Opzionali per sessione. BitBot crea il worktree fuori dal repository, nella prop
 
 Ogni richiesta di permesso degli agenti passa da un motore di regole, valutato in quest'ordine:
 
-1. **Blocchi di sicurezza**: una lista che nemmeno l'auto-approvazione supera, modificabile da te. Proposta iniziale: file fuori dal progetto, chiavi SSH e file di credenziali, `git push --force` sui branch protetti, comandi distruttivi su percorsi di sistema.
+1. **Blocchi di sicurezza**: una lista che nemmeno l'auto-approvazione supera, modificabile dall'utente. Proposta iniziale: file fuori dal progetto, chiavi SSH e file di credenziali, `git push --force` sui branch protetti, comandi distruttivi su percorsi di sistema.
 2. **Regole specifiche**: per progetto, agente, tipo di azione (lettura, modifica, cancellazione, esecuzione, rete), percorso o comando. Vince la più specifica.
-3. **Auto-approvazione globale**: attivabile come hai scelto, a tempo o fino a revoca. Quando è attiva, Bit lo mostra sempre nella vista ridotta.
-4. **Altrimenti si chiede**: scheda nella vista ridotta con consenti, nega, sempre. "Sempre" crea una regola che puoi rivedere.
+3. **Auto-approvazione globale**: attivabile, a tempo o fino a revoca. Quando è attiva, Bit lo mostra sempre nella vista ridotta.
+4. **Altrimenti si chiede**: scheda nella vista ridotta con consenti, nega, sempre. "Sempre" crea una regola che l'utente può rivedere.
 
 Ogni decisione automatica finisce in un registro consultabile dal cockpit.
 
@@ -238,21 +269,21 @@ Tre superfici con ruoli diversi: l'isola risponde a "cosa succede?", Bit a "devo
 
 ### Isola
 
-- **Posizione**: nel notch sui Mac che lo hanno; altrove una striscia che scende dal bordo alto, sullo schermo principale o su quello che scegli.
+- **Posizione**: nel notch sui Mac che lo hanno; altrove una striscia che scende dal bordo alto, sullo schermo principale o su quello scelto dall'utente.
 - **A riposo** è quasi invisibile e si apre al passaggio del mouse. Le parti trasparenti lasciano passare i clic.
 - **Pillole**: una per sessione attiva, con colore dell'agente, progetto, stato e ultima azione (per esempio "modifica src/app.rs +12 −3").
-- **Schede d'azione**: approvazioni con consenti, nega e sempre; domande degli agenti a scelta multipla, a cui rispondi lì.
-- **Ordine**: prima ciò che aspetta te, poi ciò che lavora, poi ciò che ha finito. Un clic su una pillola apre il cockpit su quella sessione.
-- **Schermo intero**: l'isola si ritira quando un'app è a schermo intero e ricompare solo per ciò che richiede te.
+- **Schede d'azione**: approvazioni con consenti, nega e sempre; domande degli agenti a scelta multipla, a cui si risponde lì.
+- **Ordine**: prima ciò che aspetta l'utente, poi ciò che lavora, poi ciò che ha finito. Un clic su una pillola apre il cockpit su quella sessione.
+- **Schermo intero**: l'isola si ritira quando un'app è a schermo intero e ricompare solo per ciò che richiede l'utente.
 
 ### Bit, il personaggio
 
 - **Stile**: pixel-art su una griglia piccola, disegnata su canvas con ingrandimento a multipli interi per restare nitida.
-- **Stati**, gli stessi del modello unificato: riposo (respira, sbatte gli occhi), al lavoro (antenna che lampeggia), in attesa di te (punto esclamativo, saltella), finito (salto di gioia), errore (un glitch, il suo "bit flip").
-- **Auto-approvazione attiva**: un segno sempre visibile su Bit, così non te ne dimentichi.
-- **Interazioni**: trascinalo fuori dall'isola e resta libero sul desktop, ricordando la posizione. Clic per aprire il cockpit; un file lasciato su Bit apre la chat con l'allegato.
+- **Stati**, gli stessi del modello unificato: riposo (respira, sbatte gli occhi), al lavoro (antenna che lampeggia), in attesa dell'utente (punto esclamativo, saltella), finito (salto di gioia), errore (un glitch, il suo "bit flip").
+- **Auto-approvazione attiva**: un segno sempre visibile su Bit, così non passa inosservata.
+- **Interazioni**: trascinato fuori dall'isola resta libero sul desktop e ricorda la posizione. Un clic apre il cockpit; un file lasciato su Bit apre la chat con l'allegato.
 - **Suoni** brevi in stile 8 bit, disattivabili. **Modalità pro**: niente animazioni decorative, solo indicatori di stato.
-- **Asset originali**: sprite e suoni fatti da te (per esempio con Aseprite e un generatore tipo sfxr). Nome, personaggio e suoni di Coucou sono riservati al suo autore.
+- **Asset originali**: sprite e suoni creati per il progetto (per esempio con Aseprite e un generatore tipo sfxr). Nome, personaggio e suoni di Coucou sono riservati al suo autore.
 
 ### Cockpit
 
@@ -289,7 +320,7 @@ Ogni integrazione è un modulo indipendente con la stessa forma: pillola, scheda
 - **Accesso**: token o API key nel portachiavi, OAuth dove il servizio lo richiede.
 - **Aggiornamento**: polling leggero che si sospende quando nessuno guarda, come fa Coucou.
 - **Uscite**: pillola nella vista ridotta, scheda nel cockpit, eventi per le notifiche.
-- **Azioni sicure**: rilanciare una CI, rifare un deploy, unire una PR, mettere in pausa un workflow. Sempre con conferma; nulla che sposti denaro o invii email senza un tuo clic esplicito.
+- **Azioni sicure**: rilanciare una CI, rifare un deploy, unire una PR, mettere in pausa un workflow. Sempre con conferma; nulla che sposti denaro o invii email senza un clic esplicito dell'utente.
 - **Strumenti per la chat**: ogni modulo registra letture e azioni nel gateway, così la chat può rispondere e agire con le stesse regole.
 - **Moduli esterni**: un SDK per moduli di terze parti arriva con l'apertura open source.
 
@@ -310,7 +341,7 @@ I controlli multimediali passano da MPRIS su Linux e dai controlli media di sist
 ### Interazioni extra
 
 - **File su Bit o sull'isola**: apre la chat con il file allegato.
-- **Bit su una finestra**: la allega come contesto. macOS e Windows usano le loro API di cattura; su Wayland passa dal portale di condivisione schermo, con la tua conferma a ogni uso.
+- **Bit su una finestra**: la allega come contesto. macOS e Windows usano le loro API di cattura; su Wayland passa dal portale di condivisione schermo, con conferma dell'utente a ogni uso.
 
 ## Stack tecnologico e struttura del repository
 
@@ -365,16 +396,54 @@ bitbot/
 ### Test e CI
 
 - **Matrice CI** su GitHub Actions: macOS, Windows e Linux, con gli installer come artefatti di ogni build.
-- **Test dei driver** su sessioni registrate: ogni agente ha i suoi file di esempio, così un aggiornamento che cambia il protocollo rompe un test e non la tua giornata.
+- **Test dei driver** su sessioni registrate: ogni agente ha i suoi file di esempio, così un aggiornamento che cambia il protocollo rompe un test invece di un rilascio.
 - **Agente finto ACP** per i test end-to-end: risponde in modo scriptato, chiede permessi, fallisce a comando.
 
 ## Roadmap a fasi
 
-Sei fasi senza stime di tempo. Ognuna si chiude con un cancello verificabile, e la successiva parte solo quando quel cancello regge su tutti e tre i sistemi.
+Sei fasi senza stime di tempo. Ognuna si chiude con un cancello verificabile, e la successiva parte solo quando quel cancello regge su macOS, Windows e Linux.
 
-&#91;embedded content: roadmap · sei fasi e i loro cancelli, senza stime di tempo\]
+### Fase 0 · Fondamenta (si parte da qui)
 
-Il primo passo concreto è la Fase 0, descritta nello spike tecnico più avanti. L'MVP include anche installer per i tre sistemi, notifiche e interfaccia in inglese e italiano.
+- Spike ACP sui quattro agenti, spike dell'isola sui tre sistemi, API locale del demone.
+- Repository e CI su macOS, Windows e Linux, verifica che il nome BitBot sia libero.
+- **Cancello**: lo spike pilota i quattro agenti e l'isola appare bene su ogni sistema.
+
+### Fase 1 · MVP
+
+- Claude Code, Codex, OpenCode e Cursor via ACP con modello, effort, progetto e sessione.
+- Permessi e auto-approvazione, chat OpenAI-compatibile e Anthropic, isola, Bit e cockpit.
+- Installer per i tre sistemi, notifiche, interfaccia in inglese e italiano.
+- **Cancello**: BitBot si usa ogni giorno al posto dei terminali, su tutti e tre i sistemi.
+
+### Fase 2 · Core completo
+
+- Driver nativi per Codex, OpenCode e Claude Code; Gemini nativo; catalogo, costi e limiti dei piani.
+- Progetti da GitHub, Forgejo e Gitea; MCP, ricerca web, dalla chat al task; Bit completo.
+- **Cancello**: per i quattro agenti non manca nulla rispetto alla loro CLI.
+
+### Fase 3 · Remoto e osservazione
+
+- OpenClaw e Hermes locali e remoti; trasporti SSH, VPN, WebSocket con token e WSL.
+- Agenti ACP generici, installazione guidata, sessioni a mano via hook, handoff tra agenti.
+- **Cancello**: una sessione remota o avviata a mano si comporta nell'isola come una locale.
+
+### Fase 4 · Integrazioni
+
+- Framework dei moduli e strumenti per la chat; GitHub, Forgejo e Gitea, Vercel, n8n.
+- Poi Stripe, Resend, Cal.com, Notion, musica, riepilogo settimanale, crypto opzionale.
+- **Cancello**: ogni modulo rispetta la forma comune e ogni sua azione chiede conferma.
+
+### Fase 5 · Open source
+
+- Documentazione, licenza MIT, firma e notarizzazione, aggiornamenti firmati, GitHub Releases.
+- SDK per moduli esterni, Claude via ACP solo con API key, revisione di sicurezza.
+- **Cancello**: chi non conosce il progetto installa e usa BitBot senza aiuto.
+
+### Dopo, senza ordine fisso
+
+- App mobile, voce, confronto tra modelli, isolamento in container.
+- Bedrock, Vertex e Azure, fallback tra provider, estensione GNOME Shell.
 
 ## Rischi e contromisure
 
@@ -405,6 +474,8 @@ Il primo passo verifica la premessa di tutto il progetto: un solo programma Rust
 | Codex | `codex-acp`, dal pacchetto npm `@agentclientprotocol/codex-acp` | Login di Codex o API key |
 | OpenCode | `opencode acp` | OpenCode configurato con un provider |
 | Cursor | `cursor-agent acp`, o `agent acp` | `agent login` o `CURSOR_API_KEY` |
+
+Ordine consigliato: prima OpenCode e Cursor, che parlano ACP in modo nativo, così un bug è del client e non di un adattatore; poi Codex e Claude Code.
 
 ### Passi
 
