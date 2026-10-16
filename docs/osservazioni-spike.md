@@ -28,8 +28,8 @@ spike in `PLAN.md`: il primo manifest per agente nasce da qui.
 | Effort | opzione dedicata: `default → none` e valori successivi | incorporato nel valore del modello, nessuna opzione `thought_level` |
 | Valori del modello | `provider/modello` (es. `opencode/nemotron-3.5-super-vl-free`) | stringa composta: `grok-4.7[context=256k,reasoning_effort=high,fast=true]` |
 | Cambio di configurazione | `effort=none` applicato e usato nel turno dopo | cambio `model` applicato e usato nel turno dopo |
-| Permessi osservati | modifica file e comando bash; opzioni `allow_once`, `allow_always`, `reject_once` (id `once`, `always`, `reject`) | nessuna richiesta per la creazione di un file nel progetto |
-| Estensioni `cursor/*` | — | non scattate in queste corse |
+| Permessi osservati | modifica file e comando bash; opzioni `allow_once`, `allow_always`, `reject_once` (id `once`, `always`, `reject`) | comandi bash (`ls`/`find` e `python -m unittest`) con `allow_once` (id `allow-once`); `sì` pipato sblocca il turno. `ls /usr > /tmp/bitbot-cursor-fuori.txt` non ha chiesto permesso |
+| Estensioni `cursor/*` | — | `cursor/create_plan` scattata (piano «CLI somma verbose»): `sì` accettato e il turno è proseguito. `cursor/ask_question` non scattata: la domanda sulla libreria è restata nel messaggio |
 | Evento di consumo | presente a fine turno | non visto in queste corse |
 | Titolo della sessione | presente nell'elenco (es. «Test unittest funzione somma in calcola.py») | presente (es. «Python Read Function») |
 
@@ -106,10 +106,11 @@ in una fase successiva.
 
 ## Punti aperti
 
-- Le estensioni bloccanti `cursor/ask_question` e `cursor/create_plan`
-  hanno l'handler collegato ma non sono mai scattate: compiti che le
-  provocano.
-- Nessuna richiesta di permesso osservata da Cursor in queste corse.
+- `cursor/ask_question` ha l'handler collegato ma non è scattata: il
+  compito che chiedeva la libreria di test ha avuto la domanda nel
+  messaggio, non nell'estensione.
+- Il comando che scrive fuori dal progetto (`ls /usr` verso
+  `/tmp/bitbot-cursor-fuori.txt`) non ha chiesto permesso.
 - Nessuna richiesta di permesso osservata da Codex: la modalità
   dichiarata era `full-access`.
 - Claude Code: il binario è installato e non è stato avviato. La via
