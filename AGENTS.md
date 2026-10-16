@@ -4,10 +4,10 @@ Companion desktop che pilota agenti di coding (Claude Code, Codex, OpenCode, Cur
 Il piano completo è in `docs/PLAN.md`: leggi la sezione pertinente prima di pianificare un compito.
 
 ## Stato attuale
-- Fase 0, Fondamenta. Lo spike ACP (`crates/bitbot-drivers`) pilota OpenCode e Cursor da profili; il crate dello stato unificato è `crates/bitbot-protocol`.
-- Provato contro agenti reali su Linux il 16 ottobre 2026: sessione nuova, permessi, cambio di configurazione e ripresa. Le differenze osservate sono in `docs/osservazioni-spike.md`.
-- Mancano ancora: profili e corse per Codex e Claude Code, estensioni di Cursor mai scattate, corse su macOS e Windows.
-- La CI gira su Linux, macOS e Windows dal 15 ottobre 2026 (fmt, clippy, test).
+- Fase 0, Fondamenta. Lo spike ACP (`crates/bitbot-drivers`) dichiara quattro profili (OpenCode, Cursor, Codex, Claude Code); il crate dello stato unificato è `crates/bitbot-protocol`.
+- Provato contro agenti reali su Linux il 16 ottobre 2026, solo OpenCode e Cursor: sessione nuova, permessi, cambio di configurazione e ripresa. Le differenze osservate sono in `docs/osservazioni-spike.md`. Codex e Claude Code non sono ancora stati eseguiti contro agenti reali.
+- Mancano ancora: corse reali per Codex e Claude Code, estensioni di Cursor mai scattate, corse su macOS e Windows.
+- La CI esiste dal 2026-10-15 (PR #7) e gira su Linux, macOS e Windows (fmt, clippy, test).
 - Non esistono ancora demone, interfaccia, gateway LLM e integrazioni.
 - Aggiorna questa sezione quando un cancello della roadmap viene superato. Non scrivere che qualcosa funziona se non è stato provato.
 
