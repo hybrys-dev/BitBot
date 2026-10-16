@@ -46,6 +46,22 @@ const BUILTINS: &[Builtin] = &[
         fallback_command: Some("agent"),
         cursor_extensions: true,
     },
+    Builtin {
+        name: "codex",
+        command: "codex-acp",
+        args: &[],
+        env: &[],
+        fallback_command: None,
+        cursor_extensions: false,
+    },
+    Builtin {
+        name: "claude",
+        command: "claude-agent-acp",
+        args: &[],
+        env: &[],
+        fallback_command: None,
+        cursor_extensions: false,
+    },
 ];
 
 impl AgentProfile {
@@ -146,9 +162,11 @@ mod tests {
         assert!(message.contains("inesistente"), "{message}");
         assert!(message.contains("opencode"), "{message}");
         assert!(message.contains("cursor"), "{message}");
+        assert!(message.contains("codex"), "{message}");
+        assert!(message.contains("claude"), "{message}");
         assert_eq!(
             message,
-            "profilo sconosciuto: inesistente (opencode, cursor)"
+            "profilo sconosciuto: inesistente (opencode, cursor, codex, claude)"
         );
     }
 
@@ -200,5 +218,39 @@ mod tests {
         assert_eq!(ignored.command, "agent");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn codex_profile_is_codex_acp_without_fallback_or_env() {
+        let profile = AgentProfile::resolve_with_path("codex", None).unwrap();
+        assert_eq!(profile.name, "codex");
+        assert_eq!(profile.command, "codex-acp");
+        assert!(profile.args.is_empty());
+        assert!(profile.env.is_empty());
+        assert!(!profile.uses_cursor_extensions());
+
+        let empty = scratch_dir("codex-empty");
+        let absent = AgentProfile::resolve_with_path("codex", Some(empty.as_os_str())).unwrap();
+        let _ = std::fs::remove_dir_all(&empty);
+        assert_eq!(absent.command, "codex-acp");
+        assert!(absent.args.is_empty());
+        assert!(absent.env.is_empty());
+    }
+
+    #[test]
+    fn claude_profile_is_claude_agent_acp_without_fallback_or_env() {
+        let profile = AgentProfile::resolve_with_path("claude", None).unwrap();
+        assert_eq!(profile.name, "claude");
+        assert_eq!(profile.command, "claude-agent-acp");
+        assert!(profile.args.is_empty());
+        assert!(profile.env.is_empty());
+        assert!(!profile.uses_cursor_extensions());
+
+        let empty = scratch_dir("claude-empty");
+        let absent = AgentProfile::resolve_with_path("claude", Some(empty.as_os_str())).unwrap();
+        let _ = std::fs::remove_dir_all(&empty);
+        assert_eq!(absent.command, "claude-agent-acp");
+        assert!(absent.args.is_empty());
+        assert!(absent.env.is_empty());
     }
 }
