@@ -55,42 +55,44 @@ binari; il profilo non è stato cambiato.
 ### Codex
 
 `codex login` ha completato il login nel browser. `codex login status`
-riporta «Logged in using ChatGPT». Lo spike non arriva a `initialize`,
-quindi l'agente non dichiara un metodo di autenticazione.
+riporta «Logged in using ChatGPT».
 
-Una prima coppia di corse si è chiusa subito: l'adattatore rifiutava
-`model_reasoning_effort = "max"` in `~/.codex/config.toml`. Quel valore
-è stato poi portato a `high` (backup `.bak-20261016-162533`).
+Prima di una sessione, due corse si chiudevano al caricamento della
+config. I log di quel blocco restano `/tmp/bitbot-codex-new.txt` e
+`/tmp/bitbot-codex-resume.txt`.
 
-Le corse rilanciate, sessione nuova e `--resume`, sul repo
-`/tmp/bitbot-spike-codex`, escono ancora prima della sessione. I log
-grezzi sono `/tmp/bitbot-codex-new.txt` e `/tmp/bitbot-codex-resume.txt`.
-Entrambe stampano `[codex] avvio` e poi:
+- `~/.codex/config.toml`: `model_reasoning_effort = "max"` rifiutato.
+  Portato a `high` (backup `.bak-20261016-162533`).
+- `~/.codex/models.json`: `default_reasoning_level` e un livello
+  supportato di `glm-5.3` ancora a `max`. Portati a `xhigh` (backup
+  `.bak-20261016-173654`). L'adattatore 0.16.0 accetta solo `none`,
+  `minimal`, `low`, `medium`, `high`, `xhigh`.
 
-```text
-error loading config: failed to parse model_catalog_json path `/home/hybrys/.codex/models.json` as JSON: unknown variant `max`, expected one of `none`, `minimal`, `low`, `medium`, `high`, `xhigh` at line 7 column 38
-```
-
-Alla riga 7 il catalogo ha `default_reasoning_level` uguale a `max` per
-il modello `glm-5.3`. Lo stesso valore compare tra i livelli di
-ragionamento supportati. L'adattatore 0.16.0 non lo accetta.
+Dopo il catalogo, sessione nuova e `--resume` sul repo
+`/tmp/bitbot-spike-codex` aprono la sessione ed escono con codice 0.
+Log: `/tmp/bitbot-codex-new-2.txt` e `/tmp/bitbot-codex-resume-2.txt`.
 
 | Aspetto | Codex (`codex-acp` 0.16.0) |
 | --- | --- |
 | Comando d'avvio | `codex-acp` |
-| Versione di protocollo | non osservata |
-| `session/list` | non osservata |
-| `session/resume` | non osservata |
-| `session/load` | non osservata |
-| Login dichiarato | non osservato: il processo esce durante il caricamento della config |
-| Opzioni di sessione | non osservate |
-| Effort | non osservato |
-| Valori del modello | non osservati |
-| Cambio di configurazione | non osservato |
-| Permessi osservati | non osservati |
+| Versione di protocollo | 1 |
+| `session/list` | sì |
+| `session/resume` | sì, senza replay: «nessun aggiornamento già pronto», il turno continua la sessione |
+| `session/load` | sì, non usata: la ripresa è passata da `session/resume` |
+| Login dichiarato | `chatgpt` («Login with ChatGPT»), `codex-api-key`, `openai-api-key` |
+| Opzioni di sessione | `mode`, `model`, `reasoning_effort` (categoria `thought_level`) |
+| Effort | opzione dedicata: nella sessione nuova `high → xhigh` |
+| Valori del modello | `glm-5.3` |
+| Cambio di configurazione | `reasoning_effort=xhigh` applicato e usato nel turno dopo |
+| Permessi osservati | nessuna richiesta; la modalità dichiarata è `full-access`. L'agente ha eseguito comandi, tra cui `python -m unittest -v`, senza chiedere |
 | Estensioni `cursor/*` | — |
-| Evento di consumo | non osservato |
-| Titolo della sessione | non osservato |
+| Evento di consumo | presente durante il turno e subito prima di `finito` |
+| Titolo della sessione | presente (es. «Aggiungi un test unittest per la funzione somma in calcola.py») |
+
+Il processo di ripresa è nuovo e rilegge `reasoning_effort=high`: il
+valore `xhigh` vale nel turno successivo della stessa sessione, non
+risulta nell'opzione riletta al riavvio. Lo spike non stampa la
+risposta finale del turno di ripresa.
 
 ### Claude Code
 
@@ -108,8 +110,8 @@ in una fase successiva.
   hanno l'handler collegato ma non sono mai scattate: compiti che le
   provocano.
 - Nessuna richiesta di permesso osservata da Cursor in queste corse.
-- Codex: le due corse partono, ma `codex-acp` 0.16.0 non apre una
-  sessione finché `~/.codex/models.json` contiene la variante `max`.
+- Nessuna richiesta di permesso osservata da Codex: la modalità
+  dichiarata era `full-access`.
 - Claude Code: il binario è installato e non è stato avviato. La via
   ACP resta bloccata dalla scelta di non usare un'API a consumo.
 - macOS e Windows: corse locali mancanti (la CI copre solo
