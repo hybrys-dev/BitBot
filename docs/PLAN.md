@@ -493,7 +493,7 @@ Ordine consigliato: prima OpenCode e Cursor, che parlano ACP in modo nativo, cos
 
 - [ ] Lo stesso codice pilota i quattro agenti cambiando solo il comando d'avvio
 - [ ] Per ciascuno funzionano nuova sessione, prompt, permesso, cambio di modello ed effort, ripresa
-- [ ] Esiste una tabella delle differenze osservate tra gli agenti, che diventa il primo manifest per agente
+- [x] Esiste una tabella delle differenze osservate tra gli agenti, che diventa il primo manifest per agente
 - [ ] Tutto funziona su macOS, Windows e Linux
 
 ## Fonti

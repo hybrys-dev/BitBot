@@ -3,7 +3,8 @@
 Prime corse dello spike contro agenti reali, 16 ottobre 2026, su Linux
 (CachyOS, cargo 1.99.0, crate `agent-client-protocol` 3.3.0). È la tabella
 delle differenze osservate prevista dal criterio di completamento dello
-spike in `PLAN.md`: il primo manifest per agente nasce da qui.
+spike in `PLAN.md`. Il primo manifest per agente è in
+`crates/bitbot-drivers/src/manifest.rs`.
 
 ## Metodo
 
