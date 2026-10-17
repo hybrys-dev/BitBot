@@ -2,6 +2,7 @@
 
 mod config_change;
 mod cursor;
+mod manifest;
 mod permission;
 mod profile;
 mod sessions;
