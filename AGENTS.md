@@ -10,7 +10,8 @@ Il piano completo è in `docs/PLAN.md`: leggi la sezione pertinente prima di pia
 - Il primo manifest per agente è in `crates/bitbot-drivers` (`manifest.rs`): solo stranezze osservate. La voce di Claude Code è «non osservato» (via ACP bloccata dal vincolo API key).
 - Mancano ancora: le corse reali ACP di Claude Code, bloccate dal vincolo API key (scelta: nessuna API a consumo); `cursor/ask_question` non scattata, ora bloccata anche dal pagamento richiesto da Cursor; corse su macOS e Windows.
 - La CI esiste dal 2026-10-15 (PR #7) e gira su Linux, macOS e Windows (fmt, clippy, test).
-- Non esistono ancora demone, interfaccia, gateway LLM e integrazioni.
+- Il demone esiste: `bitbotd` (`crates/bitbot-core`) serve JSON-RPC 2.0 una riga per messaggio su socket Unix 0600 (named pipe su Windows, via `interprocess`), con il solo metodo `version` definito in `bitbot-protocol`. Niente sessioni, permessi, né supervisione ancora.
+- Non esistono ancora interfaccia, gateway LLM e integrazioni.
 - Aggiorna questa sezione quando un cancello della roadmap viene superato. Non scrivere che qualcosa funziona se non è stato provato.
 
 ## Principi non negoziabili
