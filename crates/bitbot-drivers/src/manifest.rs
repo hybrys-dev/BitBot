@@ -77,8 +77,6 @@ pub(crate) enum Permissions {
     },
     /// `session/request_permission` è scattata. Gli id non sono una mappa completa.
     Observed,
-    /// Nessuna richiesta. `mode` è la modalità dichiarata in quella corsa.
-    NotObserved { mode: &'static str },
 }
 
 /// Estensioni `cursor/*` di cui si sa se sono scattate.
@@ -130,9 +128,7 @@ const CODEX: AgentManifest = AgentManifest {
             observed_change: ("high", "xhigh"),
             resume_source: Some(EffortSource::Config),
         },
-        permissions: Permissions::NotObserved {
-            mode: "full-access",
-        },
+        permissions: Permissions::Observed,
         cursor_extensions: None,
     }),
 };
@@ -224,9 +220,7 @@ mod tests {
                         observed_change: ("high", "xhigh"),
                         resume_source: Some(EffortSource::Config),
                     },
-                    permissions: Permissions::NotObserved {
-                        mode: "full-access",
-                    },
+                    permissions: Permissions::Observed,
                     cursor_extensions: None,
                 }),
             })

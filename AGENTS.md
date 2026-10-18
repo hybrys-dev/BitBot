@@ -5,9 +5,10 @@ Il piano completo è in `docs/PLAN.md`: leggi la sezione pertinente prima di pia
 
 ## Stato attuale
 - Fase 0, Fondamenta. Lo spike ACP (`crates/bitbot-drivers`) dichiara quattro profili (OpenCode, Cursor, Codex, Claude Code); il crate dello stato unificato è `crates/bitbot-protocol`.
-- Provato contro agenti reali su Linux il 16 ottobre 2026. OpenCode e Cursor: sessione nuova, permessi, cambio di configurazione e ripresa. Codex, dopo `codex login` e la correzione del catalogo modelli: sessione nuova, cambio di `reasoning_effort` e ripresa. Nessuna richiesta di permesso, con modalità `full-access`. Claude Code non è stato avviato. Le differenze osservate sono in `docs/osservazioni-spike.md`.
-- Il primo manifest per agente è in `crates/bitbot-drivers` (`manifest.rs`): solo stranezze osservate il 16 ottobre 2026. La voce di Claude Code è «non osservato» (via ACP bloccata dal vincolo API key).
-- Mancano ancora: le corse reali ACP di Claude Code, bloccate dal vincolo API key (scelta: nessuna API a consumo); `cursor/ask_question` non scattata; corse su macOS e Windows.
+- Provato contro agenti reali su Linux il 16 ottobre 2026. OpenCode e Cursor: sessione nuova, permessi, cambio di configurazione e ripresa. Codex, dopo `codex login` e la correzione del catalogo modelli: sessione nuova, cambio di `reasoning_effort` e ripresa. Claude Code non è stato avviato. Le differenze osservate sono in `docs/osservazioni-spike.md`.
+- Il 18 ottobre 2026 Codex ha chiesto il suo primo permesso: in `workspace-write` con `approval_policy = on-request` (config temporanea, ripristinata) la scrittura fuori dal progetto chiede `session/request_permission`, opzione `allow_once` con id `approved`; letture e scritture interne no. L'opzione ACP `mode` («Approval Preset») non rispecchia la sandbox della config. Nella stessa data Cursor non ha eseguito compiti: «Add a payment method to continue».
+- Il primo manifest per agente è in `crates/bitbot-drivers` (`manifest.rs`): solo stranezze osservate. La voce di Claude Code è «non osservato» (via ACP bloccata dal vincolo API key).
+- Mancano ancora: le corse reali ACP di Claude Code, bloccate dal vincolo API key (scelta: nessuna API a consumo); `cursor/ask_question` non scattata, ora bloccata anche dal pagamento richiesto da Cursor; corse su macOS e Windows.
 - La CI esiste dal 2026-10-15 (PR #7) e gira su Linux, macOS e Windows (fmt, clippy, test).
 - Non esistono ancora demone, interfaccia, gateway LLM e integrazioni.
 - Aggiorna questa sezione quando un cancello della roadmap viene superato. Non scrivere che qualcosa funziona se non è stato provato.
