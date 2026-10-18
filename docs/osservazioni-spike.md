@@ -105,15 +105,46 @@ sull'Agent SDK (enforcement gennaio-febbraio 2026; sezione Login di
 dell'abbonamento resta la modalità «terminale gestito + hook», prevista
 in una fase successiva.
 
+## Corse del 18 ottobre 2026: permessi di Codex, Cursor bloccato
+
+Stesso metodo del 16, sempre su Linux. Obiettivo: permessi di Codex
+fuori da `full-access` e far scattare `cursor/ask_question`.
+
+### Codex in modalità restrittiva
+
+Ottenuta senza toccare lo spike: `~/.codex/config.toml` con
+`approval_policy = "on-request"` e `sandbox_mode = "workspace-write"`
+(backup `config.toml.bak-20261018-permessi`, ripristinata a fine corsa).
+Repo di prova `/tmp/bitbot-spike-permessi`, sessione nuova, compito con
+scrittura di un report dentro il progetto.
+
+- Letture fuori dal progetto (`ls`, `cat` sul vault): nessun permesso.
+- Scritture dentro il progetto (`test_calcola.py`, `report.txt`): nessun
+  permesso.
+- Scrittura fuori dal progetto: `session/request_permission` scattata.
+  L'opzione scelta aveva kind `allow_once` e **id `approved`** (OpenCode
+  usa `once`, Cursor `allow-once`): gli id non formano una mappa completa.
+- L'opzione ACP `mode` («Approval Preset», valore `auto`) non rispecchia
+  `sandbox_mode`/`approval_policy` della config: cambiare la modalità via
+  ACP non equivale a cambiare la sandbox.
+- Cambio `reasoning_effort` `high → xhigh` e verifica nel turno dopo:
+  confermati anche in questa corsa.
+
+### Cursor
+
+Il turno termina subito senza chiamare strumenti, con la risposta
+«Add a payment method to continue»: l'account non può eseguire compiti
+in questo momento (funzionava il 16). `cursor/ask_question` resta non
+verificata finché l'account non torna attivo.
+
 ## Punti aperti
 
 - `cursor/ask_question` ha l'handler collegato ma non è scattata: il
   compito che chiedeva la libreria di test ha avuto la domanda nel
-  messaggio, non nell'estensione.
+  messaggio, non nell'estensione. La corsa del 18 non ha potuto ritentarla:
+  Cursor risponde «Add a payment method to continue».
 - Il comando che scrive fuori dal progetto (`ls /usr` verso
   `/tmp/bitbot-cursor-fuori.txt`) non ha chiesto permesso.
-- Nessuna richiesta di permesso osservata da Codex: la modalità
-  dichiarata era `full-access`.
 - Claude Code: il binario è installato e non è stato avviato. La via
   ACP resta bloccata dalla scelta di non usare un'API a consumo.
 - macOS e Windows: corse locali mancanti (la CI copre solo
