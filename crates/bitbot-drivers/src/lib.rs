@@ -19,8 +19,8 @@ use agent_client_protocol::role::HasPeer;
 use agent_client_protocol::schema::v1::{
     AuthMethod, ClientCapabilities, ContentBlock, Implementation, InitializeRequest,
     InitializeResponse, ListSessionsRequest, RequestPermissionRequest, SessionConfigKind,
-    SessionConfigOption, SessionConfigOptionCategory, SessionInfo, SessionModeState,
-    SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
+    SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelectOptions, SessionInfo,
+    SessionModeState, SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{
@@ -32,7 +32,8 @@ use bitbot_protocol::{AgentState, Status};
 
 const CLIENT_NAME: &str = "bitbot-spike";
 const DEFAULT_AGENT: &str = "opencode";
-const USAGE: &str = "uso: bitbot-spike [--agent <nome>] [--resume] <cartella> <compito>";
+const USAGE: &str =
+    "uso: bitbot-spike [--agent <nome>] [--model <valore>] [--resume] <cartella> <compito>";
 
 pub(crate) fn json_text(value: &impl serde::Serialize) -> String {
     match serde_json::to_value(value) {
@@ -47,14 +48,16 @@ pub(crate) fn json_text(value: &impl serde::Serialize) -> String {
 pub struct Invocation {
     pub resume: bool,
     pub agent: String,
+    /// Valore dell'opzione `model` da impostare prima del primo prompt.
+    pub model: Option<String>,
     pub cwd: String,
     pub task: String,
 }
 
-/// Legge `bitbot-spike [--agent <nome>] [--resume] <cartella> <compito>`.
+/// Legge `bitbot-spike [--agent <nome>] [--model <valore>] [--resume] <cartella> <compito>`.
 ///
-/// `--agent` e `--resume` stanno prima della cartella, in qualunque ordine.
-/// Senza `--agent` il profilo è `opencode`.
+/// `--agent`, `--model` e `--resume` stanno prima della cartella, in
+/// qualunque ordine. Senza `--agent` il profilo è `opencode`.
 pub fn parse_invocation<I, S>(args: I) -> anyhow::Result<Invocation>
 where
     I: IntoIterator<Item = S>,
@@ -66,6 +69,7 @@ where
         .collect();
     let mut resume = false;
     let mut agent = None;
+    let mut model = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -86,6 +90,17 @@ where
                 agent = Some(name.clone());
                 index += 2;
             }
+            "--model" => {
+                if model.is_some() {
+                    anyhow::bail!(USAGE);
+                }
+                let Some(value) = args.get(index + 1).filter(|value| !value.starts_with("--"))
+                else {
+                    anyhow::bail!(USAGE);
+                };
+                model = Some(value.clone());
+                index += 2;
+            }
             other if other.starts_with("--") => anyhow::bail!(USAGE),
             _ => break,
         }
@@ -97,6 +112,7 @@ where
     Ok(Invocation {
         resume,
         agent: agent.unwrap_or_else(|| DEFAULT_AGENT.to_string()),
+        model,
         cwd: rest[0].clone(),
         task: rest[1..].join(" "),
     })
@@ -148,6 +164,7 @@ pub async fn run(
     cwd: impl AsRef<Path>,
     task: &str,
     resume: bool,
+    initial_model: Option<&str>,
 ) -> anyhow::Result<()> {
     let task = task.trim();
     if task.is_empty() {
@@ -187,9 +204,17 @@ pub async fn run(
             }
             println!("{}", format_initialize(&initialized));
             if resume {
-                run_resume(&connection, &initialized, &cwd, &task, &session_agent).await
+                run_resume(
+                    &connection,
+                    &initialized,
+                    &cwd,
+                    &task,
+                    initial_model,
+                    &session_agent,
+                )
+                .await
             } else {
-                run_new(&connection, &cwd, &task, &session_agent).await
+                run_new(&connection, &cwd, &task, initial_model, &session_agent).await
             }
         })
         .await;
@@ -204,6 +229,7 @@ async fn run_new<Link>(
     connection: &ConnectionTo<Link>,
     cwd: &Path,
     task: &str,
+    initial_model: Option<&str>,
     agent: &str,
 ) -> Result<(), Error>
 where
@@ -218,6 +244,9 @@ where
                 "{}",
                 format_session(session.config_options(), session.modes())
             );
+            if let Some(model) = initial_model {
+                apply_initial_model(&mut session, model).await?;
+            }
             let first = drive_turn(&mut session, task, None, agent).await?;
             apply_config_change(&mut session, first.config_options.as_deref(), agent).await
         })
@@ -229,6 +258,7 @@ async fn run_resume<Link>(
     initialized: &InitializeResponse,
     cwd: &Path,
     task: &str,
+    initial_model: Option<&str>,
     agent: &str,
 ) -> Result<(), Error>
 where
@@ -268,7 +298,7 @@ where
             .await?
             .into_session(),
     };
-    prompt_restored(session, task, agent).await
+    prompt_restored(session, task, initial_model, agent).await
 }
 
 async fn list_sessions<Link>(
@@ -300,6 +330,7 @@ where
 async fn prompt_restored<Link>(
     mut session: ActiveSession<'_, Link>,
     task: &str,
+    initial_model: Option<&str>,
     agent: &str,
 ) -> Result<(), Error>
 where
@@ -309,6 +340,9 @@ where
         "{}",
         format_session(session.config_options(), session.modes())
     );
+    if let Some(model) = initial_model {
+        apply_initial_model(&mut session, model).await?;
+    }
     show_restored_conversation(&mut session, agent).await?;
     drive_turn(&mut session, task, None, agent).await?;
     Ok(())
@@ -470,6 +504,43 @@ where
             "verifica: il turno successivo non usa {}={} (valore={shown})",
             change.id, change.to
         );
+    }
+    Ok(())
+}
+
+/// Imposta l'opzione di categoria `model` prima del primo prompt.
+///
+/// Serve a chi vuole partire con un valore preciso: per esempio `auto`
+/// su Cursor, il cui ACP fattura male i modelli espliciti.
+async fn apply_initial_model<Link>(
+    session: &mut ActiveSession<'_, Link>,
+    value: &str,
+) -> Result<(), Error>
+where
+    Link: HasPeer<Agent> + HasPeer<Link>,
+{
+    let options = session.config_options().unwrap_or(&[]);
+    let Some(option) = options
+        .iter()
+        .find(|option| matches!(option.category, Some(SessionConfigOptionCategory::Model)))
+    else {
+        return Err(terminal::acp_error(
+            "l'agente non dichiara un'opzione model",
+        ));
+    };
+    let id = json_text(&option.id);
+    let request =
+        SetSessionConfigOptionRequest::new(session.session_id().clone(), option.id.clone(), value);
+    let response = session
+        .connection()
+        .send_request(request)
+        .block_task()
+        .await?;
+    let applied = config_change::current_option_value(&response.config_options, &id);
+    match applied.as_deref() {
+        Some(current) if current == value => println!("model iniziale: impostato {id}={current}"),
+        Some(current) => println!("model iniziale: l'agente ha lasciato {id}={current}"),
+        None => println!("model iniziale: l'agente non ha restituito {id}"),
     }
     Ok(())
 }
@@ -683,13 +754,37 @@ fn format_auth_method(method: &AuthMethod) -> String {
 }
 
 fn format_option(option: &SessionConfigOption) -> String {
-    format!(
+    let mut line = format!(
         "- id={} nome={} categoria={} valore={}",
         json_text(&option.id),
         option.name,
         category_label(&option.category),
         current_value(&option.kind)
-    )
+    );
+    if let Some(values) = select_values(&option.kind) {
+        line.push_str(&format!(" valori=[{values}]"));
+    }
+    line
+}
+
+/// Valori dichiarati di un selettore, piatti o raggruppati.
+fn select_values(kind: &SessionConfigKind) -> Option<String> {
+    let SessionConfigKind::Select(select) = kind else {
+        return None;
+    };
+    let ids: Vec<String> = match &select.options {
+        SessionConfigSelectOptions::Ungrouped(options) => options
+            .iter()
+            .map(|option| json_text(&option.value))
+            .collect(),
+        SessionConfigSelectOptions::Grouped(groups) => groups
+            .iter()
+            .flat_map(|group| group.options.iter())
+            .map(|option| json_text(&option.value))
+            .collect(),
+        _ => Vec::new(),
+    };
+    (!ids.is_empty()).then(|| ids.join(" "))
 }
 
 fn category_label(category: &Option<SessionConfigOptionCategory>) -> String {
@@ -877,5 +972,25 @@ mod tests {
                 .is_err()
         );
         assert!(parse_invocation(["--resume", "--resume", "/tmp/proj", "x"]).is_err());
+    }
+
+    #[test]
+    fn parses_model_before_the_folder() {
+        let model =
+            parse_invocation(["--agent", "cursor", "--model", "auto", "/tmp/proj", "fai"]).unwrap();
+        assert_eq!(model.model.as_deref(), Some("auto"));
+        assert_eq!(model.agent, "cursor");
+
+        let model_first =
+            parse_invocation(["--model", "auto", "--resume", "/tmp/proj", "x"]).unwrap();
+        assert!(model_first.resume);
+        assert_eq!(model_first.model.as_deref(), Some("auto"));
+
+        assert_eq!(parse_invocation(["/tmp/proj", "x"]).unwrap().model, None);
+        assert!(parse_invocation(["--model"]).is_err());
+        assert!(parse_invocation(["--model", "--resume", "/tmp/proj", "x"]).is_err());
+        assert!(
+            parse_invocation(["--model", "auto", "--model", "auto", "/tmp/proj", "x"]).is_err()
+        );
     }
 }

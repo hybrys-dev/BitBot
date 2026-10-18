@@ -6,6 +6,7 @@ async fn main() -> anyhow::Result<()> {
         &invocation.cwd,
         &invocation.task,
         invocation.resume,
+        invocation.model.as_deref(),
     )
     .await
 }
