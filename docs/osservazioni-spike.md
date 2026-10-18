@@ -137,12 +137,31 @@ Il turno termina subito senza chiamare strumenti, con la risposta
 in questo momento (funzionava il 16). `cursor/ask_question` resta non
 verificata finché l'account non torna attivo.
 
+### Il blocco di Cursor è un bug noto di fatturazione ACP
+
+Non è l'account: sul forum di Cursor è confermato che l'ACP fattura
+male i modelli espliciti e chiede un metodo di pagamento anche con
+l'abbonamento a posto («use `auto` as a workaround»). Con il pool
+dello X Subscription al 48% l'errore è identico.
+
+- `auto` non è un valore dell'opzione ACP `model`: «Invalid model
+  value: auto».
+- Lo spike ora stampa i valori dichiarati di ogni selettore
+  (`valori=[…]`): il primo valore di Cursor è `default[]`, la stringa
+  composta vuota, equivalente di `auto`.
+- `--model 'default[]'` prima del primo prompt aggira il bug: il
+  turno corre. Il turno di verifica che passa a un modello esplicito
+  muore ancora con «Add a payment method to continue».
+- `cursor/ask_question` non è scattata nemmeno con l'istruzione
+  esplicita di usare «lo strumento di domanda all'utente» (due task
+  diversi): la domanda resta nel messaggio dell'agente.
+
 ## Punti aperti
 
-- `cursor/ask_question` ha l'handler collegato ma non è scattata: il
-  compito che chiedeva la libreria di test ha avuto la domanda nel
-  messaggio, non nell'estensione. La corsa del 18 non ha potuto ritentarla:
-  Cursor risponde «Add a payment method to continue».
+- `cursor/ask_question` ha l'handler collegato ma non è scattata:
+  né col compito sulla libreria di test, né con l'istruzione esplicita
+  di usare lo strumento di domanda con `model=default[]`. La domanda
+  resta nel messaggio dell'agente.
 - Il comando che scrive fuori dal progetto (`ls /usr` verso
   `/tmp/bitbot-cursor-fuori.txt`) non ha chiesto permesso.
 - Claude Code: il binario è installato e non è stato avviato. La via
