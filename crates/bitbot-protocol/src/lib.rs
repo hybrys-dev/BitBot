@@ -1,4 +1,18 @@
-//! Stato unificato degli agenti, condiviso da driver e interfacce.
+//! Stato unificato degli agenti, condiviso da driver e interfacce,
+//! e tipi dell'API JSON-RPC del demone.
+
+use serde::{Deserialize, Serialize};
+
+/// Nome del metodo JSON-RPC che restituisce [`DaemonVersion`].
+pub const VERSION_METHOD: &str = "version";
+
+/// Risposta del metodo `version`: chi parla con il demone e in che versione.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DaemonVersion {
+    pub name: String,
+    pub version: String,
+}
 
 /// Stato di una sessione, indipendente dall'agente che lo produce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,5 +217,23 @@ mod tests {
             Status::new("opencode", AgentState::Archived).line(),
             "[opencode] archiviata"
         );
+    }
+
+    #[test]
+    fn daemon_version_round_trips_without_extra_fields() {
+        let info = super::DaemonVersion {
+            name: "bitbotd".to_string(),
+            version: "0.1.0".to_string(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert_eq!(json, r#"{"name":"bitbotd","version":"0.1.0"}"#);
+        assert_eq!(
+            serde_json::from_str::<super::DaemonVersion>(&json).unwrap(),
+            info
+        );
+        assert!(serde_json::from_str::<super::DaemonVersion>(
+            r#"{"name":"bitbotd","version":"0.1.0","extra":1}"#
+        )
+        .is_err());
     }
 }
