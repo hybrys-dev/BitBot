@@ -10,7 +10,7 @@ Il piano completo è in `docs/PLAN.md`: leggi la sezione pertinente prima di pia
 - Il primo manifest per agente è in `crates/bitbot-drivers` (`manifest.rs`): solo stranezze osservate. La voce di Claude Code è «non osservato» (via ACP bloccata dal vincolo API key).
 - Mancano ancora: le corse reali ACP di Claude Code, bloccate dal vincolo API key (scelta: nessuna API a consumo); `cursor/ask_question` non scattata, ora bloccata anche dal pagamento richiesto da Cursor; corse su macOS e Windows.
 - La CI esiste dal 2026-10-15 (PR #7) e gira su Linux, macOS e Windows (fmt, clippy, test).
-- Il demone esiste: `bitbotd` (`crates/bitbot-core`) serve JSON-RPC 2.0 una riga per messaggio su socket Unix 0600 (named pipe su Windows, via `interprocess`), con il solo metodo `version` definito in `bitbot-protocol`. Niente sessioni, permessi, né supervisione ancora.
+- Il demone `bitbotd` (`crates/bitbot-core`) serve JSON-RPC 2.0 una riga per messaggio su socket Unix 0600 (named pipe su Windows, via `interprocess`). Oltre a `version`, `session/start` avvia una sessione ACP in memoria (profilo, cartella, prompt, modello opzionale) e pubblica `session/event` con lo stato unificato e `session/request` per permesso, domanda e piano; `session/respond` risponde, anche con `cancelled`. Se non resta nessun client collegato, la richiesta viene annullata così l'agente non resta fermo. Niente indice, ripresa al riavvio né supervisione: se il demone cade, la sessione cade con lui. Il giro è stato provato su Linux con un agente ACP finto, non contro un agente reale.
 - Non esistono ancora interfaccia, gateway LLM e integrazioni.
 - Aggiorna questa sezione quando un cancello della roadmap viene superato. Non scrivere che qualcosa funziona se non è stato provato.
 
