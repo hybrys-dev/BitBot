@@ -45,8 +45,10 @@ impl SocketEndpoint {
         }
         #[cfg(not(unix))]
         {
+            let _ = dir;
             let pipe = format!(r"\\.\pipe\{file}");
             let name = pipe
+                .clone()
                 .to_fs_name::<GenericFilePath>()
                 .or_else(|_| pipe.to_ns_name::<GenericNamespaced>())
                 .expect("nome della named pipe valido");
@@ -66,9 +68,12 @@ impl SocketEndpoint {
     }
 
     /// Rimuove un file socket rimasto da una corsa precedente.
-    #[cfg(unix)]
+    /// Su Windows non c'è un file: `reclaim_name` del listener basta.
     pub fn remove_stale(&self) {
-        let _ = std::fs::remove_file(&self.unix_path);
+        #[cfg(unix)]
+        {
+            let _ = std::fs::remove_file(&self.unix_path);
+        }
     }
 
     /// Stringa da mostrare all'utente all'avvio.
