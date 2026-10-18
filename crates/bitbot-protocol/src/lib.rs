@@ -6,6 +6,18 @@ use serde::{Deserialize, Serialize};
 /// Nome del metodo JSON-RPC che restituisce [`DaemonVersion`].
 pub const VERSION_METHOD: &str = "version";
 
+/// Avvia una sessione ACP in memoria.
+pub const SESSION_START_METHOD: &str = "session/start";
+
+/// Risponde a un permesso, una domanda o un piano in attesa.
+pub const SESSION_RESPOND_METHOD: &str = "session/respond";
+
+/// Notifica: lo stato unificato di una sessione è cambiato.
+pub const SESSION_EVENT_METHOD: &str = "session/event";
+
+/// Notifica: l'agente aspetta un permesso, una domanda o un piano.
+pub const SESSION_REQUEST_METHOD: &str = "session/request";
+
 /// Risposta del metodo `version`: chi parla con il demone e in che versione.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -14,8 +26,192 @@ pub struct DaemonVersion {
     pub version: String,
 }
 
+/// Parametri di `session/start`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SessionStartParams {
+    pub agent: String,
+    pub cwd: String,
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+/// Risposta di `session/start`: id locale del demone, non quello ACP.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionStartResult {
+    pub id: String,
+}
+
+/// Parametri della notifica `session/event`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SessionEventParams {
+    pub id: String,
+    /// Riga della vista ridotta, la stessa che lo spike stampa.
+    pub line: String,
+    pub status: Status,
+}
+
+/// Parametri della notifica `session/request`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SessionRequestParams {
+    pub id: String,
+    pub request_id: String,
+    pub body: SessionRequestBody,
+}
+
+/// Cosa l'agente sta chiedendo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SessionRequestBody {
+    Permission {
+        options: Vec<PermissionOptionView>,
+    },
+    Question {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        questions: Vec<QuestionView>,
+    },
+    Plan {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        overview: Option<String>,
+        plan: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        is_project: bool,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        todos: Vec<PlanTodoView>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        phases: Vec<PlanPhaseView>,
+    },
+}
+
+/// Opzione di permesso dichiarata dall'agente.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PermissionOptionView {
+    pub id: String,
+    pub name: String,
+    /// `allow_once`, `allow_always`, `reject_once`, `reject_always` o `other`.
+    pub kind: String,
+}
+
+/// Una domanda a scelta, come `cursor/ask_question`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct QuestionView {
+    pub id: String,
+    pub prompt: String,
+    pub options: Vec<QuestionOptionView>,
+    #[serde(default)]
+    pub allow_multiple: bool,
+}
+
+/// Una voce di una domanda.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct QuestionOptionView {
+    pub id: String,
+    pub label: String,
+}
+
+/// Voce di un piano.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PlanTodoView {
+    pub id: String,
+    pub content: String,
+    pub status: String,
+}
+
+/// Fase di un piano.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PlanPhaseView {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub todos: Vec<PlanTodoView>,
+}
+
+/// Parametri di `session/respond`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SessionRespondParams {
+    pub id: String,
+    pub request_id: String,
+    pub outcome: RespondOutcome,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answers: Vec<QuestionAnswer>,
+}
+
+/// Scelta del client. `cancelled` sblocca l'agente anche senza una UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RespondOutcome {
+    AllowOnce,
+    AllowAlways,
+    Reject,
+    Cancelled,
+    Accepted,
+    Rejected,
+    Answered,
+    Skipped,
+}
+
+/// Risposta a una o più domande.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct QuestionAnswer {
+    pub question_id: String,
+    pub selected_option_ids: Vec<String>,
+}
+
+/// Risposta pronta da inoltrare all'agente.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SessionReply {
+    pub outcome: RespondOutcome,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answers: Vec<QuestionAnswer>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+impl SessionReply {
+    /// Risposta che sblocca l'agente senza scegliere un'opzione.
+    pub fn cancelled() -> Self {
+        Self {
+            outcome: RespondOutcome::Cancelled,
+            answers: Vec::new(),
+        }
+    }
+}
+
+impl SessionEventParams {
+    /// Evento a partire dallo stato unificato.
+    pub fn from_status(id: impl Into<String>, status: Status) -> Self {
+        let line = status.line();
+        Self {
+            id: id.into(),
+            line,
+            status,
+        }
+    }
+}
+
 /// Stato di una sessione, indipendente dall'agente che lo produce.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AgentState {
     /// Processo in partenza, inizializzazione o login in corso.
     Starting,
@@ -49,7 +245,8 @@ impl AgentState {
 }
 
 /// Tipo di azione mostrato accanto allo stato.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ActionKind {
     /// Lettura di file o dati.
     Read,
@@ -62,11 +259,14 @@ pub enum ActionKind {
 }
 
 /// Ultima azione dell'agente, accanto allo stato.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Action {
     pub kind: ActionKind,
     pub target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub added: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub removed: Option<u32>,
 }
 
@@ -113,7 +313,8 @@ impl Action {
 }
 
 /// Stato unificato pronto da stampare su una riga.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Status {
     pub agent: String,
     pub state: AgentState,
@@ -235,5 +436,86 @@ mod tests {
             r#"{"name":"bitbotd","version":"0.1.0","extra":1}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn session_start_and_event_round_trip() {
+        let params = super::SessionStartParams {
+            agent: "opencode".to_string(),
+            cwd: "/tmp/proj".to_string(),
+            prompt: "aggiungi un test".to_string(),
+            model: Some("beta".to_string()),
+        };
+        let json = serde_json::to_string(&params).unwrap();
+        assert_eq!(
+            serde_json::from_str::<super::SessionStartParams>(&json).unwrap(),
+            params
+        );
+        assert!(serde_json::from_str::<super::SessionStartParams>(
+            r#"{"agent":"opencode","cwd":"/tmp","prompt":"x","extra":1}"#
+        )
+        .is_err());
+
+        let event = super::SessionEventParams::from_status(
+            "s-1",
+            Status::new("opencode", AgentState::Working).with_action(Action::edit(
+                "src/lib.rs",
+                8,
+                2,
+            )),
+        );
+        assert_eq!(
+            event.line,
+            "[opencode] al lavoro · modifica src/lib.rs +8 −2"
+        );
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["status"]["state"], "working");
+        assert_eq!(json["status"]["action"]["kind"], "edit");
+        assert_eq!(
+            serde_json::from_value::<super::SessionEventParams>(json).unwrap(),
+            event
+        );
+    }
+
+    #[test]
+    fn session_request_and_reply_round_trip() {
+        let request = super::SessionRequestParams {
+            id: "s-1".to_string(),
+            request_id: "r-1".to_string(),
+            body: super::SessionRequestBody::Permission {
+                options: vec![super::PermissionOptionView {
+                    id: "once".to_string(),
+                    name: "Allow once".to_string(),
+                    kind: "allow_once".to_string(),
+                }],
+            },
+        };
+        let json = serde_json::to_value(&request).unwrap();
+        assert_eq!(json["body"]["kind"], "permission");
+        assert_eq!(json["requestId"], "r-1");
+        assert_eq!(
+            serde_json::from_value::<super::SessionRequestParams>(json).unwrap(),
+            request
+        );
+
+        let reply = super::SessionRespondParams {
+            id: "s-1".to_string(),
+            request_id: "r-1".to_string(),
+            outcome: super::RespondOutcome::Answered,
+            answers: vec![super::QuestionAnswer {
+                question_id: "q1".to_string(),
+                selected_option_ids: vec!["plan".to_string()],
+            }],
+        };
+        let json = serde_json::to_string(&reply).unwrap();
+        assert!(json.contains(r#""outcome":"answered""#));
+        assert_eq!(
+            serde_json::from_str::<super::SessionRespondParams>(&json).unwrap(),
+            reply
+        );
+        assert_eq!(
+            super::SessionReply::cancelled().outcome,
+            super::RespondOutcome::Cancelled
+        );
     }
 }

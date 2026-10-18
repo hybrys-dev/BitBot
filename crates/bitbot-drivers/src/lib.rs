@@ -2,12 +2,15 @@
 
 mod config_change;
 mod cursor;
+mod host;
 mod manifest;
 mod permission;
 mod profile;
 mod sessions;
 mod status;
 mod terminal;
+
+pub use host::{AskNotice, HostEvent, ReplyEnvelope, SessionHost, SessionIngress};
 
 pub use profile::AgentProfile;
 
@@ -120,9 +123,22 @@ where
 
 /// Richiesta `initialize` per il protocollo v1, senza capacità di file o terminale.
 pub fn initialize_request() -> InitializeRequest {
+    initialize_request_named(CLIENT_NAME)
+}
+
+fn initialize_request_named(name: &str) -> InitializeRequest {
     InitializeRequest::new(ProtocolVersion::V1)
         .client_capabilities(ClientCapabilities::new())
-        .client_info(Implementation::new(CLIENT_NAME, env!("CARGO_PKG_VERSION")))
+        .client_info(Implementation::new(name, env!("CARGO_PKG_VERSION")))
+}
+
+/// Una sessione nuova: un prompt, modello opzionale, niente verifica di configurazione.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewSession {
+    pub agent: String,
+    pub cwd: PathBuf,
+    pub prompt: String,
+    pub model: Option<String>,
 }
 
 /// Avvia l'agente del profilo come processo figlio.
@@ -170,30 +186,78 @@ pub async fn run(
     if task.is_empty() {
         anyhow::bail!(USAGE);
     }
+    drive(
+        agent,
+        cwd.as_ref(),
+        SessionHost::terminal(),
+        SessionJob::Spike {
+            resume,
+            task: task.to_string(),
+            model: initial_model.map(str::to_string),
+        },
+    )
+    .await
+}
+
+/// Apre una sessione ACP, manda un solo prompt e pubblica stato e richieste su `host`.
+///
+/// Non cambia la configurazione da solo e non riprende una sessione già chiusa:
+/// quello resta dello spike. Se la connessione cade, emette lo stato `errore`.
+pub async fn run_new_session(spec: NewSession, host: SessionHost) -> anyhow::Result<()> {
+    let prompt = spec.prompt.trim();
+    if prompt.is_empty() {
+        anyhow::bail!("il prompt è vuoto");
+    }
+    drive(
+        &spec.agent,
+        &spec.cwd,
+        host,
+        SessionJob::Once {
+            task: prompt.to_string(),
+            model: spec.model,
+        },
+    )
+    .await
+}
+
+enum SessionJob {
+    Spike {
+        resume: bool,
+        task: String,
+        model: Option<String>,
+    },
+    Once {
+        task: String,
+        model: Option<String>,
+    },
+}
+
+async fn drive(agent: &str, cwd: &Path, host: SessionHost, job: SessionJob) -> anyhow::Result<()> {
     let profile = AgentProfile::resolve(agent)?;
     let cwd = prepare_cwd(cwd)?;
-    let task = task.to_string();
     let agent_name = profile.name.clone();
-    let session_agent = agent_name.clone();
-    let use_cursor = profile.uses_cursor_extensions();
-    println!("{}", Status::new(&agent_name, AgentState::Starting).line());
+    let failure_name = agent_name.clone();
+    let client_name = host.client_name();
+    host.emit(&Status::new(&agent_name, AgentState::Starting));
+    let host_for_failure = host.clone();
     let connected = agent_client_protocol::Client
         .builder()
-        .name(CLIENT_NAME)
+        .name(client_name)
         .connect_with(spawn_agent(&profile), async move |connection| {
             // Il guard deve vivere per tutta la connessione: se scade prima,
             // le richieste senza sessionId restano senza risposta.
-            let _cursor_extensions = if use_cursor {
+            let _cursor_extensions = if profile.uses_cursor_extensions() {
                 Some(
                     connection.add_dynamic_handler(cursor::ExtensionHandler::new(
-                        session_agent.clone(),
+                        agent_name.clone(),
+                        host.clone(),
                     ))?,
                 )
             } else {
                 None
             };
             let initialized = connection
-                .send_request(initialize_request())
+                .send_request(initialize_request_named(client_name))
                 .block_task()
                 .await?;
             if initialized.protocol_version != ProtocolVersion::V1 {
@@ -202,26 +266,54 @@ pub async fn run(
                     "versione di protocollo non supportata: {version}"
                 )));
             }
-            println!("{}", format_initialize(&initialized));
-            if resume {
-                run_resume(
-                    &connection,
-                    &initialized,
-                    &cwd,
-                    &task,
-                    initial_model,
-                    &session_agent,
-                )
-                .await
-            } else {
-                run_new(&connection, &cwd, &task, initial_model, &session_agent).await
+            match job {
+                SessionJob::Spike {
+                    resume,
+                    task,
+                    model,
+                } => {
+                    println!("{}", format_initialize(&initialized));
+                    if resume {
+                        run_resume(
+                            &connection,
+                            &initialized,
+                            &cwd,
+                            &task,
+                            model.as_deref(),
+                            &agent_name,
+                            &host,
+                        )
+                        .await
+                    } else {
+                        run_new(
+                            &connection,
+                            &cwd,
+                            &task,
+                            model.as_deref(),
+                            &agent_name,
+                            &host,
+                        )
+                        .await
+                    }
+                }
+                SessionJob::Once { task, model } => {
+                    run_once(
+                        &connection,
+                        &cwd,
+                        &task,
+                        model.as_deref(),
+                        &agent_name,
+                        &host,
+                    )
+                    .await
+                }
             }
         })
         .await;
     if connected.is_err() {
-        println!("{}", Status::new(&agent_name, AgentState::Failed).line());
+        host_for_failure.emit(&Status::new(&failure_name, AgentState::Failed));
     }
-    connected.context(format!("connessione con {agent_name} interrotta"))?;
+    connected.context(format!("connessione con {failure_name} interrotta"))?;
     Ok(())
 }
 
@@ -231,24 +323,57 @@ async fn run_new<Link>(
     task: &str,
     initial_model: Option<&str>,
     agent: &str,
+    host: &SessionHost,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
 {
+    let host = host.clone();
     connection
         .build_session(cwd)
         .block_task()
-        .run_until(async |mut session| {
+        .run_until(async move |mut session| {
             println!("sessione: {}", json_text(session.session_id()));
             println!(
                 "{}",
                 format_session(session.config_options(), session.modes())
             );
             if let Some(model) = initial_model {
-                apply_initial_model(&mut session, model).await?;
+                let set = apply_initial_model(&mut session, model).await?;
+                println!("{}", set.spike_line());
             }
-            let first = drive_turn(&mut session, task, None, agent).await?;
-            apply_config_change(&mut session, first.config_options.as_deref(), agent).await
+            let first = drive_turn(&mut session, task, None, agent, &host).await?;
+            apply_config_change(&mut session, first.config_options.as_deref(), agent, &host).await
+        })
+        .await
+}
+
+async fn run_once<Link>(
+    connection: &ConnectionTo<Link>,
+    cwd: &Path,
+    task: &str,
+    initial_model: Option<&str>,
+    agent: &str,
+    host: &SessionHost,
+) -> Result<(), Error>
+where
+    Link: HasPeer<Agent> + HasPeer<Link>,
+{
+    let host = host.clone();
+    let agent = agent.to_string();
+    connection
+        .build_session(cwd)
+        .block_task()
+        .run_until(async move |mut session| {
+            if let Some(model) = initial_model {
+                let set = apply_initial_model(&mut session, model).await?;
+                host.emit(
+                    &Status::new(&agent, AgentState::Working)
+                        .with_action(bitbot_protocol::Action::other(set.status_action())),
+                );
+            }
+            drive_turn(&mut session, task, None, &agent, &host).await?;
+            Ok(())
         })
         .await
 }
@@ -260,6 +385,7 @@ async fn run_resume<Link>(
     task: &str,
     initial_model: Option<&str>,
     agent: &str,
+    host: &SessionHost,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -298,7 +424,7 @@ where
             .await?
             .into_session(),
     };
-    prompt_restored(session, task, initial_model, agent).await
+    prompt_restored(session, task, initial_model, agent, host).await
 }
 
 async fn list_sessions<Link>(
@@ -332,6 +458,7 @@ async fn prompt_restored<Link>(
     task: &str,
     initial_model: Option<&str>,
     agent: &str,
+    host: &SessionHost,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -341,10 +468,11 @@ where
         format_session(session.config_options(), session.modes())
     );
     if let Some(model) = initial_model {
-        apply_initial_model(&mut session, model).await?;
+        let set = apply_initial_model(&mut session, model).await?;
+        println!("{}", set.spike_line());
     }
-    show_restored_conversation(&mut session, agent).await?;
-    drive_turn(&mut session, task, None, agent).await?;
+    show_restored_conversation(&mut session, agent, host).await?;
+    drive_turn(&mut session, task, None, agent, host).await?;
     Ok(())
 }
 
@@ -358,6 +486,7 @@ const RESTORE_LIMIT: usize = 256;
 async fn show_restored_conversation<Link>(
     session: &mut ActiveSession<'_, Link>,
     agent: &str,
+    host: &SessionHost,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -371,15 +500,15 @@ where
         }
         match next_ready(session)? {
             Some(SessionMessage::SessionMessage(dispatch)) => {
-                print_dispatch(dispatch, None, &mut turn, agent).await?;
+                print_dispatch(dispatch, None, &mut turn, agent, host).await?;
                 restored += 1;
             }
             Some(SessionMessage::StopReason(reason)) => {
-                println!("{}", status::status_from_stop(agent, &reason).line());
+                host.emit(&status::status_from_stop(agent, &reason));
                 restored += 1;
             }
             Some(_) => {
-                println!("{}", status::status_unknown(agent).line());
+                host.emit(&status::status_unknown(agent));
                 restored += 1;
             }
             None => break,
@@ -426,6 +555,7 @@ async fn drive_turn<Link>(
     task: &str,
     watch_id: Option<&str>,
     agent: &str,
+    host: &SessionHost,
 ) -> Result<TurnRecord, Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -435,13 +565,13 @@ where
     loop {
         match session.read_update().await? {
             SessionMessage::SessionMessage(dispatch) => {
-                print_dispatch(dispatch, watch_id, &mut turn, agent).await?;
+                print_dispatch(dispatch, watch_id, &mut turn, agent, host).await?;
             }
             SessionMessage::StopReason(reason) => {
-                println!("{}", status::status_from_stop(agent, &reason).line());
+                host.emit(&status::status_from_stop(agent, &reason));
                 break;
             }
-            _ => println!("{}", status::status_unknown(agent).line()),
+            _ => host.emit(&status::status_unknown(agent)),
         }
     }
     Ok(turn)
@@ -451,6 +581,7 @@ async fn apply_config_change<Link>(
     session: &mut ActiveSession<'_, Link>,
     declared: Option<&[SessionConfigOption]>,
     agent: &str,
+    host: &SessionHost,
 ) -> Result<(), Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
@@ -486,6 +617,7 @@ where
         config_change::verification_prompt(),
         Some(&change.id),
         agent,
+        host,
     )
     .await?;
     let reply = status::one_line(&turn.agent_text);
@@ -508,6 +640,31 @@ where
     Ok(())
 }
 
+struct ModelSet {
+    id: String,
+    requested: String,
+    applied: Option<String>,
+}
+
+impl ModelSet {
+    fn spike_line(&self) -> String {
+        match self.applied.as_deref() {
+            Some(current) if current == self.requested => {
+                format!("model iniziale: impostato {}={current}", self.id)
+            }
+            Some(current) => format!("model iniziale: l'agente ha lasciato {}={current}", self.id),
+            None => format!("model iniziale: l'agente non ha restituito {}", self.id),
+        }
+    }
+
+    fn status_action(&self) -> String {
+        match self.applied.as_deref() {
+            Some(current) => format!("modello {}={current}", self.id),
+            None => format!("modello {} assente", self.id),
+        }
+    }
+}
+
 /// Imposta l'opzione di categoria `model` prima del primo prompt.
 ///
 /// Serve a chi vuole partire con un valore preciso: per esempio `auto`
@@ -515,7 +672,7 @@ where
 async fn apply_initial_model<Link>(
     session: &mut ActiveSession<'_, Link>,
     value: &str,
-) -> Result<(), Error>
+) -> Result<ModelSet, Error>
 where
     Link: HasPeer<Agent> + HasPeer<Link>,
 {
@@ -537,12 +694,11 @@ where
         .block_task()
         .await?;
     let applied = config_change::current_option_value(&response.config_options, &id);
-    match applied.as_deref() {
-        Some(current) if current == value => println!("model iniziale: impostato {id}={current}"),
-        Some(current) => println!("model iniziale: l'agente ha lasciato {id}={current}"),
-        None => println!("model iniziale: l'agente non ha restituito {id}"),
-    }
-    Ok(())
+    Ok(ModelSet {
+        id,
+        requested: value.to_string(),
+        applied,
+    })
 }
 
 async fn print_dispatch(
@@ -550,10 +706,13 @@ async fn print_dispatch(
     watch_id: Option<&str>,
     turn: &mut TurnRecord,
     agent: &str,
+    host: &SessionHost,
 ) -> Result<(), Error> {
+    let host = host.clone();
     agent_client_protocol::util::MatchDispatch::new(dispatch)
         .if_request(async |request: RequestPermissionRequest, responder| {
-            match answer_permission(agent, &request).await {
+            let host = host.clone();
+            match settle_permission(&host, agent, &request).await {
                 Ok(response) => responder.respond(response),
                 Err(error) => {
                     println!("{error}");
@@ -564,50 +723,41 @@ async fn print_dispatch(
         })
         .await
         .if_request(async |request: cursor::AskQuestionRequest, responder| {
-            match cursor::answer_question(agent, &request).await {
+            let host = host.clone();
+            match cursor::settle_question(&host, agent, &request).await {
                 Ok(response) => responder.respond(response),
                 Err(error) => {
                     println!("cursor/ask_question: {error}");
                     responder.respond(cursor::cancelled_question())?;
-                    Err(error)
+                    Err(terminal::acp_error(error))
                 }
             }
         })
         .await
-        .if_request(
-            async |request: cursor::CreatePlanRequest, responder| match cursor::answer_plan(
-                agent, &request,
-            )
-            .await
-            {
+        .if_request(async |request: cursor::CreatePlanRequest, responder| {
+            let host = host.clone();
+            match cursor::settle_plan(&host, agent, &request).await {
                 Ok(response) => responder.respond(response),
                 Err(error) => {
                     println!("cursor/create_plan: {error}");
                     responder.respond(cursor::cancelled_plan())?;
-                    Err(error)
+                    Err(terminal::acp_error(error))
                 }
-            },
-        )
+            }
+        })
         .await
         .if_notification(async |notification: SessionNotification| {
             record_update(&notification.update, watch_id, turn);
-            println!(
-                "{}",
-                status::status_from_update(agent, &notification.update).line()
-            );
+            host.emit(&status::status_from_update(agent, &notification.update));
             Ok(())
         })
         .await
         .otherwise(async |dispatch| match dispatch {
             Dispatch::Request(request, responder) if request.method().starts_with("cursor/") => {
-                println!(
-                    "{}",
-                    status::status_awaiting_reply(
-                        agent,
-                        &format!("estensione {}", request.method())
-                    )
-                    .line()
-                );
+                host.emit(&status::status_awaiting_reply(
+                    agent,
+                    &format!("estensione {}", request.method()),
+                ));
                 responder.respond_with_internal_error(format!(
                     "metodo non gestito: {}",
                     request.method()
@@ -618,53 +768,21 @@ async fn print_dispatch(
         .await
 }
 
-async fn answer_permission(
+async fn settle_permission(
+    host: &SessionHost,
     agent: &str,
     request: &RequestPermissionRequest,
 ) -> Result<agent_client_protocol::schema::v1::RequestPermissionResponse, Error> {
-    println!("{}", status::status_from_permission(agent, request).line());
-    terminal::require_terminal("chiedere il permesso")?;
-    if request.options.is_empty() {
-        return Err(terminal::acp_error(
-            "l'agente non ha inviato opzioni di permesso",
-        ));
-    }
-    loop {
-        println!("permesso? [sì/no/sempre]");
-        terminal::flush_stdout();
-        let line = terminal::read_stdin_line().await?;
-        let Some(choice) = permission::parse_permission_choice(&line) else {
-            println!("risposta non valida: scrivi sì, no o sempre");
-            continue;
-        };
-        let Some(option) = permission::select_permission_option(&request.options, choice) else {
-            println!("nessuna opzione dell'agente corrisponde a questa risposta");
-            println!(
-                "{}",
-                permission::format_permission_options(&request.options)
-            );
-            continue;
-        };
-        println!(
-            "scelta: {} id={}",
-            permission_kind(option),
-            json_text(&option.option_id)
-        );
-        return Ok(permission::permission_response(json_text(
-            &option.option_id,
-        )));
-    }
-}
-
-fn permission_kind(option: &agent_client_protocol::schema::v1::PermissionOption) -> &'static str {
-    use agent_client_protocol::schema::v1::PermissionOptionKind;
-    match option.kind {
-        PermissionOptionKind::AllowOnce => "allow_once",
-        PermissionOptionKind::AllowAlways => "allow_always",
-        PermissionOptionKind::RejectOnce => "reject_once",
-        PermissionOptionKind::RejectAlways => "reject_always",
-        _ => "altro",
-    }
+    host.emit(&status::status_from_permission(agent, request));
+    let options = request.options.clone();
+    let body = permission::permission_body(&request.options);
+    let reply = host
+        .ask(body, move |reply| {
+            permission::permission_decision(&options, reply).map(|_| ())
+        })
+        .await
+        .map_err(terminal::acp_error)?;
+    permission::permission_decision(&request.options, &reply).map_err(terminal::acp_error)
 }
 
 fn record_update(update: &SessionUpdate, watch_id: Option<&str>, turn: &mut TurnRecord) {

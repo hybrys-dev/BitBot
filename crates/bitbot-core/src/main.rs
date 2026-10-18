@@ -1,10 +1,11 @@
 //! Binario `bitbotd`: apre l'endpoint predefinito e serve finché non
 //! arriva l'interruzione.
 
-use bitbot_core::{serve, socket::SocketEndpoint};
+use bitbot_core::{serve, socket::SocketEndpoint, Daemon};
 
 fn main() {
     let endpoint = SocketEndpoint::default_endpoint();
+    let daemon = Daemon::new();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -19,7 +20,7 @@ fn main() {
         };
         println!("bitbotd in ascolto su {}", endpoint.display());
         tokio::select! {
-            result = serve(listener) => result,
+            result = serve(listener, daemon) => result,
             _ = tokio::signal::ctrl_c() => Ok(()),
         }
     });

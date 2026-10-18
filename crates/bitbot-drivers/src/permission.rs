@@ -4,8 +4,10 @@ use agent_client_protocol::schema::v1::{
     PermissionOption, PermissionOptionKind, RequestPermissionOutcome, RequestPermissionResponse,
     SelectedPermissionOutcome,
 };
+use bitbot_protocol::{PermissionOptionView, RespondOutcome, SessionReply, SessionRequestBody};
 
 use crate::json_text;
+use crate::terminal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PermissionChoice {
@@ -33,12 +35,155 @@ pub(crate) fn select_permission_option(
     options: &[PermissionOption],
     choice: PermissionChoice,
 ) -> Option<&PermissionOption> {
-    for kind in preferred_kinds(choice) {
+    let views: Vec<PermissionOptionView> = options.iter().map(permission_view).collect();
+    let id = select_view(&views, choice)?.id.clone();
+    options
+        .iter()
+        .find(|option| json_text(&option.option_id) == id)
+}
+
+pub(crate) fn permission_body(options: &[PermissionOption]) -> SessionRequestBody {
+    SessionRequestBody::Permission {
+        options: options.iter().map(permission_view).collect(),
+    }
+}
+
+pub(crate) fn permission_view(option: &PermissionOption) -> PermissionOptionView {
+    PermissionOptionView {
+        id: json_text(&option.option_id),
+        name: option.name.clone(),
+        kind: kind_label(option.kind).to_string(),
+    }
+}
+
+/// `Ok(None)` è un annullamento. `Ok(Some(id))` è l'opzione dell'agente.
+pub(crate) fn permission_reply(
+    options: &[PermissionOptionView],
+    reply: &SessionReply,
+) -> Result<Option<String>, String> {
+    if !reply.answers.is_empty() {
+        return Err("un permesso non ha risposte a domande".to_string());
+    }
+    let choice = match reply.outcome {
+        RespondOutcome::Cancelled => return Ok(None),
+        RespondOutcome::AllowOnce => PermissionChoice::Allow,
+        RespondOutcome::AllowAlways => PermissionChoice::Always,
+        RespondOutcome::Reject => PermissionChoice::Reject,
+        _ => return Err("esito non valido per un permesso".to_string()),
+    };
+    match select_view(options, choice) {
+        Some(option) => Ok(Some(option.id.clone())),
+        None => Err("nessuna opzione dell'agente corrisponde a questa risposta".to_string()),
+    }
+}
+
+pub(crate) fn permission_decision(
+    options: &[PermissionOption],
+    reply: &SessionReply,
+) -> Result<RequestPermissionResponse, String> {
+    if !reply.answers.is_empty() {
+        return Err("un permesso non ha risposte a domande".to_string());
+    }
+    let choice = match reply.outcome {
+        RespondOutcome::Cancelled => return Ok(cancelled_permission()),
+        RespondOutcome::AllowOnce => PermissionChoice::Allow,
+        RespondOutcome::AllowAlways => PermissionChoice::Always,
+        RespondOutcome::Reject => PermissionChoice::Reject,
+        _ => return Err("esito non valido per un permesso".to_string()),
+    };
+    match select_permission_option(options, choice) {
+        Some(option) => Ok(permission_response(json_text(&option.option_id))),
+        None => Err("nessuna opzione dell'agente corrisponde a questa risposta".to_string()),
+    }
+}
+
+pub(crate) async fn prompt_permission(
+    options: &[PermissionOptionView],
+) -> Result<SessionReply, String> {
+    require_prompt_terminal("chiedere il permesso")?;
+    if options.is_empty() {
+        return Err("l'agente non ha inviato opzioni di permesso".to_string());
+    }
+    loop {
+        println!("permesso? [sì/no/sempre]");
+        terminal::flush_stdout();
+        let line = terminal::read_stdin_line()
+            .await
+            .map_err(|error| error.to_string())?;
+        let Some(choice) = parse_permission_choice(&line) else {
+            println!("risposta non valida: scrivi sì, no o sempre");
+            continue;
+        };
+        let outcome = match choice {
+            PermissionChoice::Allow => RespondOutcome::AllowOnce,
+            PermissionChoice::Reject => RespondOutcome::Reject,
+            PermissionChoice::Always => RespondOutcome::AllowAlways,
+        };
+        let reply = SessionReply {
+            outcome,
+            answers: Vec::new(),
+        };
+        if let Err(message) = permission_reply(options, &reply) {
+            println!("{message}");
+            println!("{}", format_views(options));
+            continue;
+        }
+        if let Some(option) = select_view(options, choice) {
+            println!("scelta: {} id={}", option.kind, option.id);
+        }
+        return Ok(reply);
+    }
+}
+
+fn require_prompt_terminal(action: &str) -> Result<(), String> {
+    terminal::require_terminal(action).map_err(|error| error.to_string())
+}
+
+fn select_view(
+    options: &[PermissionOptionView],
+    choice: PermissionChoice,
+) -> Option<&PermissionOptionView> {
+    for kind in preferred_kind_names(choice) {
         if let Some(option) = options.iter().find(|option| option.kind == *kind) {
             return Some(option);
         }
     }
-    options.iter().find(|option| label_matches(option, choice))
+    options
+        .iter()
+        .find(|option| label_matches_view(option, choice))
+}
+
+fn preferred_kind_names(choice: PermissionChoice) -> &'static [&'static str] {
+    match choice {
+        PermissionChoice::Allow => &["allow_once", "allow_always"],
+        PermissionChoice::Reject => &["reject_once", "reject_always"],
+        PermissionChoice::Always => &["allow_always"],
+    }
+}
+
+fn format_views(options: &[PermissionOptionView]) -> String {
+    options
+        .iter()
+        .map(|option| format!("- {} id={} nome={}", option.kind, option.id, option.name))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn label_matches_view(option: &PermissionOptionView, choice: PermissionChoice) -> bool {
+    let name = option.name.to_lowercase();
+    let id = option.id.to_lowercase().replace('-', "_");
+    let words = words(&name);
+    let negative = words
+        .iter()
+        .any(|word| matches!(word.as_str(), "reject" | "deny" | "nega" | "no" | "rifiuta"))
+        || id.contains("reject");
+    if matches!(choice, PermissionChoice::Allow | PermissionChoice::Always) && negative {
+        return false;
+    }
+    labels(choice).iter().any(|label| {
+        let label = label.replace('-', "_");
+        id == label || name == label || words.iter().any(|word| word == &label)
+    })
 }
 
 pub(crate) fn permission_response(option_id: impl Into<String>) -> RequestPermissionResponse {
@@ -53,35 +198,6 @@ pub(crate) fn cancelled_permission() -> RequestPermissionResponse {
     RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled)
 }
 
-pub(crate) fn format_permission_options(options: &[PermissionOption]) -> String {
-    options
-        .iter()
-        .map(|option| {
-            format!(
-                "- {} id={} nome={}",
-                kind_label(option.kind),
-                json_text(&option.option_id),
-                option.name
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn preferred_kinds(choice: PermissionChoice) -> &'static [PermissionOptionKind] {
-    match choice {
-        PermissionChoice::Allow => &[
-            PermissionOptionKind::AllowOnce,
-            PermissionOptionKind::AllowAlways,
-        ],
-        PermissionChoice::Reject => &[
-            PermissionOptionKind::RejectOnce,
-            PermissionOptionKind::RejectAlways,
-        ],
-        PermissionChoice::Always => &[PermissionOptionKind::AllowAlways],
-    }
-}
-
 fn kind_label(kind: PermissionOptionKind) -> &'static str {
     match kind {
         PermissionOptionKind::AllowOnce => "allow_once",
@@ -90,25 +206,6 @@ fn kind_label(kind: PermissionOptionKind) -> &'static str {
         PermissionOptionKind::RejectAlways => "reject_always",
         _ => "altro",
     }
-}
-
-fn label_matches(option: &PermissionOption, choice: PermissionChoice) -> bool {
-    let name = option.name.to_lowercase();
-    let id = json_text(&option.option_id)
-        .to_lowercase()
-        .replace('-', "_");
-    let words = words(&name);
-    let negative = words
-        .iter()
-        .any(|word| matches!(word.as_str(), "reject" | "deny" | "nega" | "no" | "rifiuta"))
-        || id.contains("reject");
-    if matches!(choice, PermissionChoice::Allow | PermissionChoice::Always) && negative {
-        return false;
-    }
-    labels(choice).iter().any(|label| {
-        let label = label.replace('-', "_");
-        id == label || name == label || words.iter().any(|word| word == &label)
-    })
 }
 
 fn labels(choice: PermissionChoice) -> &'static [&'static str] {
