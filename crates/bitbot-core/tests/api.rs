@@ -285,7 +285,9 @@ while True:
         }
 
         async fn next(&mut self) -> Value {
-            let line = timeout(Duration::from_secs(5), self.lines.next_line())
+            // Su macOS la prima esecuzione di uno script appena scritto in
+            // una cartella temporanea può restare ferma diversi secondi.
+            let line = timeout(Duration::from_secs(20), self.lines.next_line())
                 .await
                 .expect("tempo scaduto in attesa di una riga")
                 .unwrap()
@@ -308,7 +310,7 @@ while True:
     }
 
     async fn until_state(client: &mut Client, state: &str) -> Value {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
         loop {
             if tokio::time::Instant::now() > deadline {
                 panic!("stato {state} non arrivato");
@@ -322,7 +324,7 @@ while True:
     }
 
     async fn log_contains(log: &Path, needle: &str) {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
         loop {
             if let Ok(text) = std::fs::read_to_string(log) {
                 if text.contains(needle) {

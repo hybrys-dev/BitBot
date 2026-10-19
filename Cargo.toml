@@ -1,3 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/bitbot-protocol", "crates/bitbot-drivers", "crates/bitbot-core"]
+members = [
+    "crates/bitbot-protocol",
+    "crates/bitbot-drivers",
+    "crates/bitbot-core",
+    "apps/desktop/src-tauri",
+]
