@@ -27,7 +27,9 @@ pub fn listen(endpoint: &SocketEndpoint) -> io::Result<Listener> {
     Ok(listener)
 }
 
-/// Socket al solo utente: 0600 su Unix, ACL predefinita su Windows.
+/// Su Unix il file del socket è 0600. Su Windows il listener non riceve
+/// un descrittore nostro (`security_descriptor` è privato): resta l'ACL
+/// predefinita della named pipe. Cartelle diverse non condividono il nome.
 #[cfg(unix)]
 fn restrict_permissions(endpoint: &SocketEndpoint) {
     use std::os::unix::fs::PermissionsExt;

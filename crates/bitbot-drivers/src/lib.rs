@@ -167,7 +167,34 @@ pub fn prepare_cwd(path: impl AsRef<Path>) -> anyhow::Result<PathBuf> {
     if !cwd.is_dir() {
         anyhow::bail!("non è una cartella: {}", cwd.display());
     }
-    Ok(cwd)
+    Ok(plain_cwd(cwd))
+}
+
+/// `canonicalize` su Windows antepone `\\?\`. Gli agenti non accettano
+/// quel prefisso come cartella di `session/new`.
+fn plain_cwd(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let Some(text) = path.to_str() else {
+            return path;
+        };
+        PathBuf::from(strip_verbatim_prefix(text))
+    }
+    #[cfg(not(windows))]
+    {
+        path
+    }
+}
+
+#[cfg(any(windows, test))]
+fn strip_verbatim_prefix(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        path.to_string()
+    }
 }
 
 /// Esegue lo spike contro il profilo scelto.
@@ -1038,12 +1065,28 @@ mod tests {
         let cwd = prepare_cwd(".").unwrap();
         assert!(cwd.is_absolute());
         assert!(cwd.is_dir());
+        assert!(
+            !cwd.to_string_lossy().starts_with(r"\\?\"),
+            "{}",
+            cwd.display()
+        );
 
         let file = std::env::temp_dir().join("bitbot-spike-not-a-directory");
         std::fs::write(&file, "x").unwrap();
         let error = prepare_cwd(&file).unwrap_err();
         let _ = std::fs::remove_file(&file);
         assert!(error.to_string().contains("non è una cartella"));
+    }
+
+    #[test]
+    fn verbatim_windows_prefix_is_stripped() {
+        assert_eq!(super::strip_verbatim_prefix(r"\\?\C:\repo"), r"C:\repo");
+        assert_eq!(
+            super::strip_verbatim_prefix(r"\\?\UNC\server\share\repo"),
+            r"\\server\share\repo"
+        );
+        assert_eq!(super::strip_verbatim_prefix(r"C:\repo"), r"C:\repo");
+        assert_eq!(super::strip_verbatim_prefix("/tmp/repo"), "/tmp/repo");
     }
 
     #[test]

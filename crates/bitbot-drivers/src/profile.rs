@@ -70,6 +70,8 @@ impl AgentProfile {
     /// Per Cursor, se `cursor-agent` non è eseguibile nel `PATH`, il comando
     /// diventa `agent`. Se manca anche quello, il profilo resta `agent`: il
     /// processo fallirà all'avvio, come per gli altri agenti assenti.
+    /// Su Windows il nome può includere `.cmd` o `.bat`: è lo shim che il
+    /// processo riesce ad avviare.
     pub fn resolve(name: &str) -> anyhow::Result<Self> {
         Self::resolve_with_path(name, std::env::var_os("PATH").as_deref())
     }
@@ -84,8 +86,11 @@ impl AgentProfile {
             anyhow::bail!("profilo sconosciuto: {name} ({known})");
         };
         let command = match builtin.fallback_command {
-            Some(fallback) if !command_in_path(builtin.command, path) => fallback.to_string(),
-            _ => builtin.command.to_string(),
+            Some(fallback) => spawnable_on_path(builtin.command, path)
+                .or_else(|| spawnable_on_path(fallback, path))
+                .unwrap_or_else(|| fallback.to_string()),
+            None => spawnable_on_path(builtin.command, path)
+                .unwrap_or_else(|| builtin.command.to_string()),
         };
         Ok(Self {
             name: builtin.name.to_string(),
@@ -106,26 +111,42 @@ impl AgentProfile {
     }
 }
 
-fn command_in_path(command: &str, path_var: Option<&OsStr>) -> bool {
-    let Some(path_var) = path_var else {
-        return false;
-    };
-    let names = command_names(command);
-    std::env::split_paths(path_var).any(|dir| names.iter().any(|name| is_runnable(&dir.join(name))))
+/// Nome da passare a `std::process::Command`, se il programma è nel PATH.
+///
+/// Su Unix conta il file con il bit di esecuzione. Su Windows la ricerca
+/// aggiunge solo `.exe`: uno shim npm `opencode.cmd` va passato con
+/// l'estensione, altrimenti il processo non parte. `.bat` è lo stesso
+/// caso. Un file senza estensione non conta, il runtime non lo trova.
+fn spawnable_on_path(command: &str, path_var: Option<&OsStr>) -> Option<String> {
+    let path_var = path_var?;
+    std::env::split_paths(path_var).find_map(|dir| spawnable_in_dir(&dir, command))
 }
 
-fn command_names(command: &str) -> Vec<String> {
-    #[cfg(windows)]
-    {
-        let mut names = vec![command.to_string()];
-        if !command.to_ascii_lowercase().ends_with(".exe") {
-            names.push(format!("{command}.exe"));
-        }
-        names
-    }
-    #[cfg(not(windows))]
-    {
-        vec![command.to_string()]
+#[cfg(windows)]
+fn spawnable_in_dir(dir: &Path, command: &str) -> Option<String> {
+    command_from_hits(
+        command,
+        is_runnable(&dir.join(format!("{command}.exe"))),
+        is_runnable(&dir.join(format!("{command}.cmd"))),
+        is_runnable(&dir.join(format!("{command}.bat"))),
+    )
+}
+
+#[cfg(not(windows))]
+fn spawnable_in_dir(dir: &Path, command: &str) -> Option<String> {
+    is_runnable(&dir.join(command)).then(|| command.to_string())
+}
+
+#[cfg(any(windows, test))]
+fn command_from_hits(command: &str, has_exe: bool, has_cmd: bool, has_bat: bool) -> Option<String> {
+    if has_exe {
+        Some(command.to_string())
+    } else if has_cmd {
+        Some(format!("{command}.cmd"))
+    } else if has_bat {
+        Some(format!("{command}.bat"))
+    } else {
+        None
     }
 }
 
@@ -216,6 +237,59 @@ mod tests {
         std::fs::set_permissions(&binary, permissions).unwrap();
         let ignored = AgentProfile::resolve_with_path("cursor", Some(dir.as_os_str())).unwrap();
         assert_eq!(ignored.command, "agent");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn windows_spawn_name_prefers_exe_then_cmd_then_bat() {
+        assert_eq!(
+            super::command_from_hits("opencode", true, true, true).as_deref(),
+            Some("opencode")
+        );
+        assert_eq!(
+            super::command_from_hits("opencode", false, true, true).as_deref(),
+            Some("opencode.cmd")
+        );
+        assert_eq!(
+            super::command_from_hits("codex-acp", false, false, true).as_deref(),
+            Some("codex-acp.bat")
+        );
+        assert_eq!(
+            super::command_from_hits("opencode", false, false, false),
+            None
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_cmd_shim_is_the_spawn_name_and_exe_wins() {
+        let dir = scratch_dir("win-shim");
+        std::fs::write(dir.join("opencode.cmd"), b"@echo off\r\n").unwrap();
+        std::fs::write(dir.join("cursor-agent.cmd"), b"@echo off\r\n").unwrap();
+        std::fs::write(dir.join("cursor-agent.exe"), b"").unwrap();
+        std::fs::write(dir.join("codex-acp.cmd"), b"@echo off\r\n").unwrap();
+
+        let opencode = AgentProfile::resolve_with_path("opencode", Some(dir.as_os_str())).unwrap();
+        assert_eq!(opencode.command, "opencode.cmd");
+        let codex = AgentProfile::resolve_with_path("codex", Some(dir.as_os_str())).unwrap();
+        assert_eq!(codex.command, "codex-acp.cmd");
+        let cursor = AgentProfile::resolve_with_path("cursor", Some(dir.as_os_str())).unwrap();
+        assert_eq!(cursor.command, "cursor-agent");
+
+        std::fs::remove_file(dir.join("cursor-agent.exe")).unwrap();
+        let cmd = AgentProfile::resolve_with_path("cursor", Some(dir.as_os_str())).unwrap();
+        assert_eq!(cmd.command, "cursor-agent.cmd");
+
+        std::fs::remove_file(dir.join("cursor-agent.cmd")).unwrap();
+        std::fs::write(dir.join("agent.cmd"), b"@echo off\r\n").unwrap();
+        let fallback = AgentProfile::resolve_with_path("cursor", Some(dir.as_os_str())).unwrap();
+        assert_eq!(fallback.command, "agent.cmd");
+
+        let bare = dir.join("opencode");
+        std::fs::write(&bare, b"").unwrap();
+        let still_cmd = AgentProfile::resolve_with_path("opencode", Some(dir.as_os_str())).unwrap();
+        assert_eq!(still_cmd.command, "opencode.cmd");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
