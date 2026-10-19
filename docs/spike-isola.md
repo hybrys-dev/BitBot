@@ -31,12 +31,12 @@ Ho aperto una finestra a schermo intero. Mentre risultava la finestra attiva, la
 
 ## Cosa non ho visto
 
-- macOS: né il pannello nel notch, né la striscia sugli schermi senza notch, né il ritiro negli spazi a schermo intero. Il codice macOS non è stato compilato qui.
-- Windows: né la finestra trasparente, né il primo piano senza focus, né la regione arrotondata, né il ritiro. Il codice Windows non è stato compilato qui.
+- macOS: né il pannello nel notch, né la striscia sugli schermi senza notch, né il ritiro negli spazi a schermo intero. Il codice è stato compilato dalla CI, non eseguito su un Mac.
+- Windows: né la finestra trasparente, né il primo piano senza focus, né la regione arrotondata, né il ritiro. Il codice è stato compilato dalla CI, non eseguito su Windows.
 - GNOME, la finestra dock e XWayland.
 - KDE, Hyprland e Sway, e quindi layer-shell sul bordo alto.
 - Un compositor in cui la finestra X11 resti davvero sul bordo fisico, sopra un pannello.
 - Un clic che attraversa gli angoli trasparenti.
 - L'aspetto a schermo intero, oltre allo stato unmapped descritto sopra.
 
-Non ho eseguito la matrice CI su `ubuntu-latest`, `macos-latest` e `windows-latest`: l'ho solo aggiornata con le librerie di sistema Linux (`libwebkit2gtk-4.1-dev`, `libgtk-layer-shell-dev` e il minimo per compilare Tauri e collegare X11).
+La CI su `ubuntu-latest`, `macos-latest` e `windows-latest` (fmt, clippy e test) è verde sul commit che chiude gli avvisi di compilazione. Compilare non mostra la finestra: l'aspetto resta non visto sui sistemi elencati sopra. Le librerie Linux aggiunte al workflow sono `libwebkit2gtk-4.1-dev`, `libgtk-layer-shell-dev` e il minimo per compilare Tauri e collegare X11.
