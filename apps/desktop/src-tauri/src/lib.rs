@@ -65,10 +65,17 @@ pub(crate) fn create_window(app: &tauri::App) -> anyhow::Result<WebviewWindow> {
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn place_top_center(window: &WebviewWindow, top_offset: f64) -> anyhow::Result<()> {
-    let Some(monitor) = window
-        .primary_monitor()
-        .context("lettura dello schermo principale")?
-    else {
+    // All'avvio della sessione lo schermo può non esserci ancora: si aspetta un po'
+    // invece di lasciare l'isola nell'angolo.
+    let mut monitor = None;
+    for _ in 0..20 {
+        monitor = window.primary_monitor().unwrap_or(None);
+        if monitor.is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    let Some(monitor) = monitor else {
         eprintln!("bitbot-desktop: schermo principale assente, posizione predefinita");
         return Ok(());
     };
