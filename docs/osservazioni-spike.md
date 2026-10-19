@@ -168,8 +168,9 @@ dello X Subscription al 48% l'errore è identico.
   ACP resta bloccata dalla scelta di non usare un'API a consumo.
 - macOS e Windows: corse locali mancanti (la CI copre solo
   fmt, clippy e test).
-- Lo spike non stampa la risposta finale dell'agente nel turno di
-  ripresa, solo nel turno di verifica del cambio configurazione.
+- Lo spike stampa `risposta agente:` anche nel turno di ripresa
+  (19 ottobre 2026, test sul codice puro). Una corsa reale che mostri
+  quella riga non è stata rifatta.
 
 ## Verifica del 19 ottobre 2026: ripresa, domanda, scrittura fuori progetto
 
