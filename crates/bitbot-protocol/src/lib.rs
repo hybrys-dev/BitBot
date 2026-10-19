@@ -6,6 +6,12 @@ use serde::{Deserialize, Serialize};
 /// Nome del metodo JSON-RPC che restituisce [`DaemonVersion`].
 pub const VERSION_METHOD: &str = "version";
 
+/// Nome del metodo JSON-RPC che elenca le sessioni con lo stato unificato.
+pub const SESSIONS_METHOD: &str = "sessions";
+
+/// Nome del metodo JSON-RPC che avvia una sessione agente nel demone.
+pub const SESSION_START_METHOD: &str = "session/start";
+
 /// Risposta del metodo `version`: chi parla con il demone e in che versione.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -14,8 +20,52 @@ pub struct DaemonVersion {
     pub version: String,
 }
 
+/// Parametri di `session/start`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionStartParams {
+    /// Nome del profilo agente, per esempio `opencode`.
+    pub agent: String,
+    /// Cartella di lavoro della sessione.
+    pub cwd: String,
+    /// Primo prompt della sessione.
+    pub task: String,
+}
+
+/// Risposta di `session/start`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionStarted {
+    /// Identificativo della sessione per l'agente.
+    pub session_id: String,
+}
+
+/// Una sessione come la vede la vista compatta.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionStatus {
+    pub id: String,
+    pub agent: String,
+    pub state: AgentState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<Action>,
+}
+
+impl SessionStatus {
+    /// L'ultimo stato osservato, con l'ultima azione accanto.
+    pub fn from_status(id: impl Into<String>, status: &Status) -> Self {
+        Self {
+            id: id.into(),
+            agent: status.agent.clone(),
+            state: status.state,
+            action: status.action.clone(),
+        }
+    }
+}
+
+
 /// Stato di una sessione, indipendente dall'agente che lo produce.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentState {
     /// Processo in partenza, inizializzazione o login in corso.
     Starting,
@@ -49,7 +99,7 @@ impl AgentState {
 }
 
 /// Tipo di azione mostrato accanto allo stato.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActionKind {
     /// Lettura di file o dati.
     Read,
@@ -62,7 +112,7 @@ pub enum ActionKind {
 }
 
 /// Ultima azione dell'agente, accanto allo stato.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Action {
     pub kind: ActionKind,
     pub target: String,

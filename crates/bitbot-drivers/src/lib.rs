@@ -5,6 +5,7 @@ mod cursor;
 mod manifest;
 mod permission;
 mod profile;
+pub mod runner;
 mod sessions;
 mod status;
 mod terminal;
@@ -130,7 +131,7 @@ pub fn initialize_request() -> InitializeRequest {
 /// Stdin e stdout restano il trasporto JSON-RPC. Lo stderr del figlio viene
 /// inoltrato sullo stderr di questo processo. L'ambiente del profilo si aggiunge
 /// a quello ereditato: una mappa vuota lascia il processo come prima.
-fn spawn_agent(profile: &AgentProfile) -> AcpAgent {
+pub(crate) fn spawn_agent(profile: &AgentProfile) -> AcpAgent {
     AcpAgent::new(
         AcpAgentConfig::new(profile.command.as_str())
             .args(profile.args.clone())
