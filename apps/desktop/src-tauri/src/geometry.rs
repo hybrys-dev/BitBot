@@ -64,14 +64,20 @@ pub(crate) fn island_visible(foreground_fullscreen: bool) -> bool {
 }
 
 /// Origine in alto a sinistra, centrata sul bordo alto del monitor.
+///
+/// `top_offset` è quanto copre il pannello in alto: l'isola scende sotto.
 #[cfg(any(test, not(target_os = "macos")))]
 pub(crate) fn top_center_origin(
     monitor_x: f64,
     monitor_y: f64,
     monitor_width: f64,
     island_width: f64,
+    top_offset: f64,
 ) -> (f64, f64) {
-    (monitor_x + (monitor_width - island_width) / 2.0, monitor_y)
+    (
+        monitor_x + (monitor_width - island_width) / 2.0,
+        monitor_y + top_offset,
+    )
 }
 
 /// Rettangolo Cocoa dell'isola.
@@ -210,7 +216,18 @@ mod tests {
 
     #[test]
     fn top_center_uses_the_monitor_origin() {
-        assert_eq!(top_center_origin(100.0, 40.0, 1000.0, 240.0), (480.0, 40.0));
+        assert_eq!(
+            top_center_origin(100.0, 40.0, 1000.0, 240.0, 0.0),
+            (480.0, 40.0)
+        );
+    }
+
+    #[test]
+    fn top_center_descends_below_the_panel() {
+        assert_eq!(
+            top_center_origin(100.0, 40.0, 1000.0, 240.0, 32.0),
+            (480.0, 72.0)
+        );
     }
 
     #[test]

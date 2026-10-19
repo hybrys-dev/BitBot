@@ -64,7 +64,7 @@ pub(crate) fn create_window(app: &tauri::App) -> anyhow::Result<WebviewWindow> {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn place_top_center(window: &WebviewWindow) -> anyhow::Result<()> {
+pub(crate) fn place_top_center(window: &WebviewWindow, top_offset: f64) -> anyhow::Result<()> {
     let Some(monitor) = window
         .primary_monitor()
         .context("lettura dello schermo principale")?
@@ -80,7 +80,13 @@ pub(crate) fn place_top_center(window: &WebviewWindow) -> anyhow::Result<()> {
     let origin_x = f64::from(monitor.position().x) / scale;
     let origin_y = f64::from(monitor.position().y) / scale;
     let width = f64::from(monitor.size().width) / scale;
-    let (x, y) = geometry::top_center_origin(origin_x, origin_y, width, geometry::ISLAND_WIDTH);
+    let (x, y) = geometry::top_center_origin(
+        origin_x,
+        origin_y,
+        width,
+        geometry::ISLAND_WIDTH,
+        top_offset,
+    );
     window
         .set_position(LogicalPosition::new(x, y))
         .context("posizione dell'isola")?;
