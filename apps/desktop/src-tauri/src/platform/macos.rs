@@ -8,10 +8,8 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::Context;
-use objc2::runtime::NSObjectProtocol;
-use objc2::{sel, ClassType, MainThreadMarker};
-use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen, NSWindow};
-use objc2_foundation::{NSPoint, NSRect, NSSize};
+use objc2::sel;
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen};
 use tauri::{AppHandle, WebviewUrl};
 use tauri_nspanel::{CollectionBehavior, Panel, PanelBuilder, PanelLevel, StyleMask};
 
