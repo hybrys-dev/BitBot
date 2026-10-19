@@ -405,9 +405,9 @@ Sei fasi senza stime di tempo. Ognuna si chiude con un cancello verificabile, e 
 
 ### Fase 0 · Fondamenta (si parte da qui)
 
-- Spike ACP sui quattro agenti, spike dell'isola sui tre sistemi, API locale del demone.
+- Spike ACP sui quattro agenti, spike dell'isola sui tre sistemi, API locale del demone. Per Claude Code il codice distingue solo il comando di avvio; la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo». L'abbonamento resta il terminale gestito e gli hook, già previsti dopo.
 - Repository e CI su macOS, Windows e Linux, verifica che il nome BitBot sia libero.
-- **Cancello**: lo spike pilota i quattro agenti e l'isola appare bene su ogni sistema.
+- **Cancello**: lo spike pilota OpenCode, Cursor e Codex e l'isola appare bene su ogni sistema. La corsa ACP di Claude Code non fa parte di questo cancello. La fase 0 resta aperta.
 
 ### Fase 1 · MVP
 
@@ -491,10 +491,12 @@ Ordine consigliato: prima OpenCode e Cursor, che parlano ACP in modo nativo, cos
 
 ### Criterio di completamento
 
-- [ ] Lo stesso codice pilota i quattro agenti cambiando solo il comando d'avvio
-- [ ] Per ciascuno funzionano nuova sessione, prompt, permesso, cambio di modello ed effort, ripresa
+- [ ] Lo stesso codice pilota OpenCode, Cursor e Codex cambiando solo il comando d'avvio. Per Claude Code il codice distingue solo il comando di avvio (`claude-agent-acp`, senza ripiego): la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo»
+- [ ] Per OpenCode, Cursor e Codex funzionano nuova sessione, prompt, permesso, cambio di modello ed effort, ripresa
 - [x] Esiste una tabella delle differenze osservate tra gli agenti, che diventa il primo manifest per agente
 - [ ] Tutto funziona su macOS, Windows e Linux
+
+La fase 0 resta aperta. Il manifest di Claude resta «non osservato», senza effort né permessi inventati. L'abbonamento resta il terminale gestito e gli hook, già previsti dopo.
 
 ## Fonti
 
