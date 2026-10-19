@@ -1,0 +1,32 @@
+[package]
+name = "bitbot-desktop"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Guscio Tauri dell'isola, spike della fase 0"
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"
+tauri = { version = "2", features = ["macos-private-api"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+tauri-nspanel = "2.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cairo-rs = "0.18"
+gtk = { version = "0.18", features = ["v3_24"] }
+gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+raw-window-handle = "0.6"
+
+[build-dependencies]
+tauri-build = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
