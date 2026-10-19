@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use anyhow::Context;
 use objc2::runtime::NSObjectProtocol;
 use objc2::{sel, ClassType, MainThreadMarker};
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen, NSWindow};
