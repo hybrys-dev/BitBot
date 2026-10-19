@@ -166,23 +166,12 @@ impl From<WinRect> for PxBounds {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct MonitorInfo {
     cb_size: u32,
     rc_monitor: WinRect,
     rc_work: WinRect,
     dw_flags: u32,
-}
-
-impl Default for MonitorInfo {
-    fn default() -> Self {
-        Self {
-            cb_size: 0,
-            rc_monitor: WinRect::default(),
-            rc_work: WinRect::default(),
-            dw_flags: 0,
-        }
-    }
 }
 
 #[link(name = "user32")]

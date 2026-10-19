@@ -1,10 +1,14 @@
 //! Ritiro a schermo intero. Su macOS lo fa il collection behavior del pannello,
 //! che non ha `FullScreenAuxiliary` e quindi non entra in quello spazio.
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use std::thread;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use tauri::Manager;
 
 pub(crate) fn watch(app: AppHandle, layer_shell: bool) {
     #[cfg(any(target_os = "linux", target_os = "windows"))]

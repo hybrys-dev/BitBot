@@ -80,10 +80,10 @@ fn place(panel: &dyn Panel<tauri::Wry>) {
     };
     let cocoa = screen.frame();
     let screen_rect = RectF {
-        x: cocoa.origin.x as f64,
-        y: cocoa.origin.y as f64,
-        width: cocoa.size.width as f64,
-        height: cocoa.size.height as f64,
+        x: cocoa.origin.x,
+        y: cocoa.origin.y,
+        width: cocoa.size.width,
+        height: cocoa.size.height,
     };
     let (left, right) = notch_areas(&screen);
     let frame = geometry::macos_island_frame(screen_rect, left, right, safe_top(&screen));
@@ -114,18 +114,18 @@ fn safe_top(screen: &NSScreen) -> f64 {
     if !screen.respondsToSelector(sel!(safeAreaInsets)) {
         return 0.0;
     }
-    screen.safeAreaInsets().top as f64
+    screen.safeAreaInsets().top
 }
 
 fn area(rect: NSRect) -> Option<RectF> {
-    let width = rect.size.width as f64;
-    let height = rect.size.height as f64;
+    let width = rect.size.width;
+    let height = rect.size.height;
     if width <= 0.0 || height <= 0.0 {
         return None;
     }
     Some(RectF {
-        x: rect.origin.x as f64,
-        y: rect.origin.y as f64,
+        x: rect.origin.x,
+        y: rect.origin.y,
         width,
         height,
     })
@@ -159,16 +159,10 @@ fn cursor_inside(panel: &dyn Panel<tauri::Wry>) -> bool {
     let window: &NSWindow = panel.as_panel().as_super();
     let frame = window.frame();
     let point = window.mouseLocationOutsideOfEventStream();
-    let width = frame.size.width as f64;
-    let height = frame.size.height as f64;
+    let width = frame.size.width;
+    let height = frame.size.height;
     if width <= 0.0 || height <= 0.0 {
         return false;
     }
-    geometry::point_in_rounded_rect(
-        point.x as f64,
-        height - point.y as f64,
-        width,
-        height,
-        height / 2.0,
-    )
+    geometry::point_in_rounded_rect(point.x, height - point.y, width, height, height / 2.0)
 }

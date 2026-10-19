@@ -22,6 +22,7 @@ pub(crate) enum LinuxPresentation {
 }
 
 impl SessionEnv {
+    #[cfg(target_os = "linux")]
     pub(crate) fn from_process() -> Self {
         Self {
             session_type: env_var("XDG_SESSION_TYPE"),
@@ -32,6 +33,7 @@ impl SessionEnv {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn env_var(name: &str) -> String {
     std::env::var(name).unwrap_or_default()
 }
