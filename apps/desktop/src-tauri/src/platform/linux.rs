@@ -136,7 +136,7 @@ fn attach_dock(window: &WebviewWindow) -> anyhow::Result<()> {
     gtk_window.set_type_hint(gtk::gdk::WindowTypeHint::Dock);
     configure_floating(&gtk_window);
     gtk_window.stick();
-    show_placed(window, &gtk_window)
+    show_placed(window, &gtk_window, top_panel_offset())
 }
 
 fn attach_above(window: &WebviewWindow) -> anyhow::Result<()> {
@@ -144,7 +144,44 @@ fn attach_above(window: &WebviewWindow) -> anyhow::Result<()> {
         .gtk_window()
         .context("finestra GTK dell'isola non disponibile")?;
     configure_floating(&gtk_window);
-    show_placed(window, &gtk_window)
+    show_placed(window, &gtk_window, top_panel_offset())
+}
+
+/// Quanto copre il pannello in alto, in pixel logici.
+///
+/// L'area di lavoro del window manager lo dice: senza, l'isola finisce sotto
+/// il pannello e non si vede.
+fn top_panel_offset() -> f64 {
+    use gtk::glib::translate::ToGlibPtr;
+
+    let Some(display) = gtk::gdk::Display::default() else {
+        return 0.0;
+    };
+    let screen = display.default_screen();
+    let screen_ptr = screen.to_glib_none().0;
+    let primary = unsafe { gtk::gdk::ffi::gdk_screen_get_primary_monitor(screen_ptr) };
+    let mut work = gtk::gdk::ffi::GdkRectangle {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+    };
+    unsafe {
+        gtk::gdk::ffi::gdk_screen_get_monitor_workarea(screen_ptr, primary, &mut work);
+    }
+    let mut monitor = gtk::gdk::ffi::GdkRectangle {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+    };
+    unsafe {
+        gtk::gdk::ffi::gdk_screen_get_monitor_geometry(screen_ptr, primary, &mut monitor);
+    }
+    if work.width <= 0 || monitor.width <= 0 {
+        return 0.0;
+    }
+    f64::from((work.y - monitor.y).max(0))
 }
 
 fn configure_floating(gtk_window: &gtk::ApplicationWindow) {
@@ -157,17 +194,21 @@ fn configure_floating(gtk_window: &gtk::ApplicationWindow) {
     install_input_shape(gtk_window);
 }
 
-fn show_placed(window: &WebviewWindow, gtk_window: &gtk::ApplicationWindow) -> anyhow::Result<()> {
+fn show_placed(
+    window: &WebviewWindow,
+    gtk_window: &gtk::ApplicationWindow,
+    top_offset: f64,
+) -> anyhow::Result<()> {
     let width = geometry::ISLAND_WIDTH as i32;
     let height = geometry::ISLAND_HEIGHT as i32;
     // Il webview parte da 200×200: senza un tetto la striscia resta alta.
     gtk_window.set_default_size(width, height);
     gtk_window.set_size_request(width, height);
     gtk_window.resize(width, height);
-    crate::place_top_center(window)?;
+    crate::place_top_center(window, top_offset)?;
     window.show().context("visualizzazione dell'isola")?;
     gtk_window.resize(width, height);
-    crate::place_top_center(window)?;
+    crate::place_top_center(window, top_offset)?;
     apply_input_shape(gtk_window);
     Ok(())
 }

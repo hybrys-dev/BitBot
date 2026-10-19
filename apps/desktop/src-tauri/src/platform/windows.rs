@@ -22,7 +22,7 @@ const MONITOR_DEFAULTTONEAREST: u32 = 2;
 pub(crate) fn open(app: &tauri::App) -> anyhow::Result<()> {
     eprintln!("bitbot-desktop: isola su Windows, finestra trasparente sempre in primo piano");
     let window = crate::create_window(app)?;
-    crate::place_top_center(&window)?;
+    crate::place_top_center(&window, 0.0)?;
     if let Err(err) = prevent_activation(&window) {
         eprintln!("bitbot-desktop: stile non attivante non applicato: {err:#}");
     }
