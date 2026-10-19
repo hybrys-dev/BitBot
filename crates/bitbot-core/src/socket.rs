@@ -189,9 +189,10 @@ mod tests {
         }
         #[cfg(windows)]
         {
-            assert!(left.display().starts_with(r"\\.\pipe\"));
-            let rest = left.display().trim_start_matches(r"\\.\pipe\");
-            assert!(!rest.contains('\\'), "{}", left.display());
+            let shown = left.display();
+            assert!(shown.starts_with(r"\\.\pipe\"));
+            let rest = shown.trim_start_matches(r"\\.\pipe\");
+            assert!(!rest.contains('\\'), "{shown}");
         }
     }
 
