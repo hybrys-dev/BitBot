@@ -472,7 +472,8 @@ where
         println!("{}", set.spike_line());
     }
     show_restored_conversation(&mut session, agent, host).await?;
-    drive_turn(&mut session, task, None, agent, host).await?;
+    let turn = drive_turn(&mut session, task, None, agent, host).await?;
+    print_agent_reply(&turn.agent_text);
     Ok(())
 }
 
@@ -550,6 +551,24 @@ fn empty_turn() -> TurnRecord {
     }
 }
 
+/// Riga `risposta agente:` di un turno, uguale per la verifica e per la ripresa.
+///
+/// Il testo vuoto non produce una riga: lo spike non inventa una risposta.
+fn format_agent_reply(agent_text: &str) -> Option<String> {
+    let reply = status::one_line(agent_text);
+    if reply.is_empty() {
+        None
+    } else {
+        Some(format!("risposta agente: {reply}"))
+    }
+}
+
+fn print_agent_reply(agent_text: &str) {
+    if let Some(line) = format_agent_reply(agent_text) {
+        println!("{line}");
+    }
+}
+
 async fn drive_turn<Link>(
     session: &mut ActiveSession<'_, Link>,
     task: &str,
@@ -620,10 +639,7 @@ where
         host,
     )
     .await?;
-    let reply = status::one_line(&turn.agent_text);
-    if !reply.is_empty() {
-        println!("risposta agente: {reply}");
-    }
+    print_agent_reply(&turn.agent_text);
     if config_change::turn_uses(applied.as_deref(), &turn.config_updates, &change.to) {
         println!(
             "verifica: il turno successivo usa {}={}",
@@ -1090,6 +1106,21 @@ mod tests {
                 .is_err()
         );
         assert!(parse_invocation(["--resume", "--resume", "/tmp/proj", "x"]).is_err());
+    }
+
+    #[test]
+    fn resume_turn_reply_uses_the_verification_line_and_skips_empty_text() {
+        assert_eq!(
+            format_agent_reply("risposta\nfinale"),
+            Some("risposta agente: risposta finale".to_string())
+        );
+        let long = "a".repeat(121);
+        assert_eq!(
+            format_agent_reply(&long).as_deref(),
+            Some(format!("risposta agente: {}…", "a".repeat(120))).as_deref()
+        );
+        assert_eq!(format_agent_reply(""), None);
+        assert_eq!(format_agent_reply(" \n\t"), None);
     }
 
     #[test]

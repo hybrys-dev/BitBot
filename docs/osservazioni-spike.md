@@ -170,3 +170,64 @@ dello X Subscription al 48% l'errore è identico.
   fmt, clippy e test).
 - Lo spike non stampa la risposta finale dell'agente nel turno di
   ripresa, solo nel turno di verifica del cambio configurazione.
+
+## Verifica del 19 ottobre 2026: ripresa, domanda, scrittura fuori progetto
+
+Linux, senza un agente reale nel `PATH`: non ci sono `cursor-agent` né
+`agent`. Nessuna corsa ACP, nessun login toccato, nessuna API a consumo.
+Lo schema letto è quello del crate `agent-client-protocol` 3.3.0
+(schema ACP 1.11).
+
+### Risposta del turno di ripresa
+
+`prompt_restored` leggeva il turno con `drive_turn` e scartava il
+`TurnRecord`. Il turno di verifica del cambio di configurazione stampa
+invece `risposta agente:` da `agent_text`, dopo `one_line`. La ripresa
+ora usa la stessa riga. Se il testo è vuoto, o solo spazi, non stampa
+nulla e non inventa una risposta. Il test
+`resume_turn_reply_uses_the_verification_line_and_skips_empty_text`
+copre la riga sul codice puro: non avvia un agente e non prova la
+ripresa contro un processo vero.
+
+### `cursor/ask_question`
+
+Il client la registra in due punti, insieme a `cursor/create_plan`:
+
+- un handler sulla connessione, prima di `initialize`, per i metodi
+  senza `sessionId` (il router di sessione consegna solo i messaggi che
+  portano l'id della sessione);
+- `print_dispatch`, se la richiesta arriva nel turno.
+
+La risposta serializzata è
+`{"outcome":{"outcome":"answered","answers":[{"questionId":"…","selectedOptionIds":["…"]}]}}`,
+la forma documentata da Cursor. `cancelled` e `skipped` usano lo stesso
+inviluppo. Il 16 ottobre `cursor/create_plan`, sullo stesso handler e
+con lo stesso inviluppo `outcome`, è stato accettato e il turno è
+proseguito: Cursor non scarta questa forma.
+
+Lo schema non ha una capacità che accende lo strumento. `initialize`
+resta senza `fs` e senza `terminal`. `_meta` non è un interruttore di
+`AskQuestion`: il 25 settembre 2026 il forum di Cursor ha scritto che
+la sessione ACP non offre lo strumento, e che non dipende dalle
+capacità mandate dal client. Il client è già corretto. Non si forza
+l'evento e non si simula una richiesta.
+
+`cursor-agent` e `agent` non sono nel `PATH` di questa macchina. Non
+c'è una corsa con `--model 'default[]'` e non si è visto un prompt di
+pagamento.
+
+### Permesso per `ls /usr > /tmp/bitbot-cursor-fuori.txt`
+
+Ogni `session/request_permission` che arriva nel turno passa da
+`settle_permission` e viene chiesta all'utente. Il client non legge il
+comando, non distingue un percorso fuori dal progetto e non risponde
+da solo `cancelled` né `allow_once`. Se il metodo è quello giusto ma il
+corpo non si legge, il turno fallisce: non è un permesso concesso in
+silenzio.
+
+Il 16 ottobre gli altri comandi bash (`ls`/`find` e
+`python -m unittest`) sono arrivati e sono stati chiesti con
+`allow-once`. La scrittura fuori dal progetto non ha prodotto
+`session/request_permission`: è il comportamento dell'agente, non un
+filtro del client. Non si aggiusta. Oggi il binario non c'è, quindi la
+corsa non è stata ripetuta.
