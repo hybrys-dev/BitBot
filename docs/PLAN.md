@@ -406,7 +406,7 @@ Sei fasi senza stime di tempo. Ognuna si chiude con un cancello verificabile, e 
 ### Fase 0 · Fondamenta (si parte da qui)
 
 - Spike ACP sui quattro agenti, spike dell'isola sui tre sistemi, API locale del demone. Per Claude Code il codice distingue solo il comando di avvio; la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo». L'abbonamento resta il terminale gestito e gli hook, già previsti dopo.
-- Repository e CI su macOS, Windows e Linux, verifica che il nome BitBot sia libero.
+- Repository e CI su macOS, Windows e Linux, verifica che il nome BitBot sia libero (fatta il 19 ottobre 2026: esito in `docs/nome-bitbot.md`; nessun conflitto nei developer tool, ma nome pubblico, dominio e pacchetto npm da scegliere prima dell'uscita open source).
 - **Cancello**: lo spike pilota OpenCode, Cursor e Codex e l'isola appare bene su ogni sistema. La corsa ACP di Claude Code non fa parte di questo cancello. La fase 0 resta aperta.
 
 ### Fase 1 · MVP
@@ -462,7 +462,7 @@ Il rischio più grosso non è tecnico ma di ampiezza: sei agenti, tutti i provid
 | Termini dei provider | Uso non consentito di credenziali | Mai riusare i token di login degli agenti; identificarsi correttamente (per Codex, il campo `clientInfo.name`) |
 | Installer non firmati | Avvisi di Gatekeeper e SmartScreen | Accettabile per uso personale; firma e notarizzazione prima dell'uscita pubblica |
 | Permessi di macOS | Cattura finestre e automazione richiedono autorizzazioni | Chiederle solo quando la funzione viene usata, mai all'avvio |
-| Nome | BitBot potrebbe essere già usato altrove | Verifica di dominio, organizzazione GitHub, crates.io e marchi prima dell'uscita pubblica |
+| Nome | BitBot potrebbe essere già usato altrove | Verifica di dominio, organizzazione GitHub, crates.io e marchi prima dell'uscita pubblica: fatta il 19 ottobre 2026 (`docs/nome-bitbot.md`). Il nome resta per l'uso personale; per l'uscita pubblica serve un nome con dominio e npm liberi |
 
 ## Primo spike tecnico
 
