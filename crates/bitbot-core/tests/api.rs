@@ -55,6 +55,30 @@ async fn serves_version_and_unknown_method_over_the_socket() {
     );
 }
 
+#[tokio::test]
+async fn two_directories_accept_connections_at_the_same_time() {
+    let _lock = test_lock().await;
+    let first = scratch_endpoint("due-a");
+    let second = scratch_endpoint("due-b");
+    assert_ne!(
+        first.display(),
+        second.display(),
+        "due cartelle non possono condividere il socket"
+    );
+    let listener_a = listen(&first).unwrap();
+    let listener_b = listen(&second).unwrap();
+    let server_a = tokio::spawn(async move { serve(listener_a, bitbot_core::Daemon::new()).await });
+    let server_b = tokio::spawn(async move { serve(listener_b, bitbot_core::Daemon::new()).await });
+    let response_a = roundtrip(&first, r#"{"jsonrpc":"2.0","id":1,"method":"version"}"#).await;
+    let response_b = roundtrip(&second, r#"{"jsonrpc":"2.0","id":2,"method":"version"}"#).await;
+    assert!(response_a.contains(r#""id":1"#), "{response_a}");
+    assert!(response_b.contains(r#""id":2"#), "{response_b}");
+    server_a.abort();
+    server_b.abort();
+    let _ = server_a.await;
+    let _ = server_b.await;
+}
+
 async fn test_lock() -> tokio::sync::MutexGuard<'static, ()> {
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     LOCK.lock().await
