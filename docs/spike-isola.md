@@ -5,9 +5,10 @@ Finestra minima del guscio Tauri 2, in `apps/desktop`. Non è l'isola del prodot
 Il binario è `bitbot-desktop`. Si compila con `cargo build -p bitbot-desktop`. Non c'è uno script Tauri separato e non c'è un installer.
 
 La fase 0 è chiusa il 20 ottobre 2026 con dei limiti noti: questo spike
-non dimostra che l'isola appaia bene su ogni sistema. Hyprland, Sway,
-Plasma e il notch vero restano senza prova visiva, come elencato in
-«Cosa non ho visto».
+non dimostra che l'isola appaia bene su ogni sistema. Hyprland e il
+notch vero restano senza prova visiva, come elencato in «Cosa non ho
+visto»; Sway e Plasma sono provati con screenshot la sera del 20
+ottobre 2026.
 
 ## Cosa fa il codice
 
@@ -39,14 +40,16 @@ Corse successive, tutte in macchina virtuale:
 - 19 ottobre 2026, Fedora 44 con GNOME 44: la pillola è stata vista per intero sotto la barra in alto, alla finestra 240×36. È la corsa per cui sono entrate in main la correzione che la fa scendere sotto il pannello e quella che aspetta lo schermo all'avvio della sessione (PR #24).
 - 20 ottobre 2026, Windows 11: la striscia arrotondata traslucida in alto al centro, sopra le altre finestre, verificata con uno screenshot della console con PowerShell aperto sotto.
 - 20 ottobre 2026, macOS Ventura 13.7.8: il pannello non attivante sopra la barra dei menu. La VM non ha notch, quindi si vede solo il ramo «nessun notch, striscia sul bordo alto».
-- Plasma 6 in Wayland: l'isola parte e sceglie il percorso layer-shell («overlay layer-shell ancorato in alto»). Non c'è ancora uno screenshot.
+- 20 ottobre 2026, sera, Sway 1.11 su Fedora 44: percorso layer-shell («overlay layer-shell ancorato in alto»). Screenshot con `grim`, misurato sui pixel: pillola larga 240, alta 36, centrata (centro a 639 pixel su schermo da 1280), in alto (righe 25-60). Screenshot in `screenshots/isola-sway.png` fuori dal repository e in `~/isola-prove/` nella VM.
+- 20 ottobre 2026, sera, Plasma 6.8 su Fedora 44: percorso layer-shell. Prova per differenza: screenshot con e senza isola, l'area cambiata è esattamente 240×36 centrata (520-759 su 1280) e ancorata al bordo (righe 0-35). Screenshot in `screenshots/isola-plasma.png` e `screenshots/isola-vuota.png` fuori dal repository.
+
+Hyprland non è stato provato: su Fedora 44 non è pacchettizzato e il copr che lo builda offre solo il chroot rawhide (20 ottobre 2026).
 
 ## Cosa non ho visto
 
 - Il notch del Mac: la VM Ventura non ne ha, e il posizionamento attorno al notch resta non verificato.
 - Il ritiro negli spazi a schermo intero su macOS e il ritiro su Windows a schermo intero: la finestra è stata vista, il comportamento no.
-- Plasma 6: l'isola parte e sceglie il percorso layer-shell, ma non c'è uno screenshot.
-- Hyprland e Sway, e quindi layer-shell sul bordo alto.
+- Hyprland: su Fedora 44 non è pacchettizzato e il copr esistente builda solo rawhide (20 ottobre 2026). Resta senza prova visiva.
 - Un compositor in cui la finestra X11 resti davvero sul bordo fisico, sopra un pannello.
 - Un clic che attraversa gli angoli trasparenti.
 - L'aspetto a schermo intero, oltre allo stato unmapped descritto sopra.
