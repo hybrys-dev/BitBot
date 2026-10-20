@@ -232,3 +232,89 @@ Il 16 ottobre gli altri comandi bash (`ls`/`find` e
 `session/request_permission`: è il comportamento dell'agente, non un
 filtro del client. Non si aggiusta. Oggi il binario non c'è, quindi la
 corsa non è stata ripetuta.
+
+## Corse del 20 ottobre 2026 su macchine virtuali
+
+Tre VM sul cluster Proxmox, una per sistema: Fedora 44 (GNOME),
+Windows 11, macOS Ventura 13.7.8 (OpenCore). Nessun portatile: gli
+agenti girano dentro le VM. Gli agenti sono installati da zero su
+Windows e macOS e autenticati con le credenziali copiate dalla
+macchina di lavoro.
+
+### OpenCode 1.19.3 su Windows e macOS
+
+- Sessione nuova, primo turno e `test_calcola.py` creato su entrambi.
+- `thought_level` compare fra le opzioni solo **dopo** il primo turno:
+  lo spike sceglie quindi il modello (`big-pickle` →
+  `deepseek-v4.1-flash-free`) invece dell'effort. Con OpenCode v2.0.24
+  su Linux l'opzione c'era subito. Non è un difetto dello spike: è
+  l'ordine con cui l'agente pubblica le opzioni.
+- Permesso: con il compito che scrive fuori dal progetto l'agente
+  chiede (`in attesa di permesso`), la risposta `si` sblocca e
+  `report.txt` viene scritto su entrambi.
+- Ripresa: `session/resume` sulla stessa sessione, nessun replay, su
+  entrambi.
+- Senza un terminale (stdin non TTY) lo spike si ferma al primo
+  permesso con `stdin non è un terminale` e non risponde da solo: è il
+  comportamento voluto.
+
+### Cursor CLI 2026.10.19 su Windows e macOS
+
+La CLI si installa (Windows: `%LOCALAPPDATA%\cursor-agent`, comandi
+`agent.cmd` e `cursor-agent.cmd`; macOS: `~/.local/bin/agent`), ma la
+sessione ACP viene rifiutata:
+
+```text
+Authentication required: { "message": "Authentication required. Please run 'agent login' first, then call authenticate() with methodId 'cursor_login'." }
+```
+
+Su macOS prima ancora: `Your macOS login keychain is locked`. Dopo
+`security unlock-keychain` resta l'autenticazione mancante: i file
+`~/.cursor/cli-config.json` e `agent-cli-state.json` non bastano, il
+login passa da `agent login`, che è interattivo. Nessuna riga Cursor
+della matrice è stata percorsa su Windows o macOS.
+
+### `codex-acp` su Windows e macOS
+
+Due blocchi, entrambi sul provider, non sul sistema:
+
+- account ChatGPT Go: `The 'gpt-5.5' model is not supported when using
+  Codex with a ChatGPT account`; lo stesso per `gpt-5.1-codex` e
+  `gpt-5.1`.
+- provider Z.AI: `Weekly/Monthly Limit Exhausted`, e prima ancora il
+  catalogo modelli non si decodifica (`unknown variant 'max', expected
+  one of none, minimal, low, medium, high, xhigh`).
+
+La sessione ACP parte e il turno muore sulla risposta del provider:
+niente sessione completata, niente permessi, niente ripresa.
+
+### Isola su Windows
+
+L'app Tauri compila con MSVC (`bitbot-desktop.exe`) e disegna la
+striscia arrotondata traslucida in alto al centro, sopra le altre
+finestre: verificato con uno screenshot della console, con PowerShell
+aperto sotto. Da una sessione SSH il processo nasce nella sessione 0 e
+non si vede: per lanciarlo nella sessione interattiva serve un task
+pianificato con principal `Interactive` (`Register-ScheduledTask`),
+perché `schtasks /run` su un task creato con `/ru ... /rp ... /it`
+risponde `Element not found`.
+
+### Isola su macOS
+
+L'app Tauri compila con i Command Line Tools 14.2 e mostra il pannello
+non attivante sopra la barra dei menu (`bitbot-desktop: isola su macOS,
+pannello non attivante sopra la barra dei menu`). Da SSH il processo
+non ha la sessione grafica: serve `launchctl asuser <uid> sudo -u
+<utente>`. La VM non ha notch: il ramo «nessuno notch, striscia sul
+bordo alto» è l'unico percorso visibile, il posizionamento attorno al
+notch resta non verificato.
+
+### Installazione headless su macOS
+
+Il Setup Assistant si è completato da QMP (`input-send-event` con
+coordinate assolute, mai `sendkey` per i clic). I Command Line Tools
+sono arrivati da `softwareupdate -i "Command Line Tools for
+Xcode-14.2"`: l'estrazione dei pacchetti resta a CPU alta per venti
+minuti e sembra ferma, ma finisce. Remote Login si accende da Impostazioni
+di Sistema → Generali → Condivisione; da lì tutto il resto passa da
+SSH.
