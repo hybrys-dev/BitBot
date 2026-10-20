@@ -166,11 +166,22 @@ dello X Subscription al 48% l'errore è identico.
   `/tmp/bitbot-cursor-fuori.txt`) non ha chiesto permesso.
 - Claude Code: il binario è installato e non è stato avviato. La via
   ACP resta bloccata dalla scelta di non usare un'API a consumo.
-- macOS e Windows: corse locali mancanti (la CI copre solo
-  fmt, clippy e test).
+- macOS e Windows: le corse reali del 20 ottobre 2026 hanno coperto
+  OpenCode su entrambi i sistemi (macchine virtuali, `docs/corse-sistemi.md`).
+  Cursor e Codex restano pilotati solo su Linux: nelle VM Cursor chiede
+  un `agent login` interattivo e Codex muore sul provider, per l'account
+  ChatGPT Go senza i modelli richiesti e Z.AI con la quota esaurita.
+  La CI copre solo fmt, clippy e test.
 - Lo spike stampa `risposta agente:` anche nel turno di ripresa
   (19 ottobre 2026, test sul codice puro). Una corsa reale che mostri
   quella riga non è stata rifatta.
+
+Stato al 20 ottobre 2026: la fase 0 è chiusa con questi punti come
+limiti noti accettati, non come fatti. Restano da chiudere con una
+corsa vera quando le condizioni tornano: `cursor/ask_question`, il
+permesso di Cursor per la scrittura fuori dal progetto, le righe Cursor
+e Codex su macOS e Windows, e la riga `risposta agente:` nel turno di
+ripresa. Il cancello della fase 1 li riprende.
 
 ## Verifica del 19 ottobre 2026: ripresa, domanda, scrittura fuori progetto
 
