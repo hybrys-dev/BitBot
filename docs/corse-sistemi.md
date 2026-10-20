@@ -7,14 +7,16 @@ Il criterio «tutto funziona su macOS, Windows e Linux» dello spike in
 
 Questo file è la lista da eseguire a mano. Ogni riga dice dove è già
 stata fatta. Il 20 ottobre 2026 OpenCode è stato pilotato su tutti e tre
-i sistemi, in macchina virtuale: le sue righe macOS e Windows sono
-fatte. Cursor e Codex restano pilotati solo su Linux: nelle VM Cursor
-chiede un `agent login` interattivo e Codex muore sul provider (l'account
-ChatGPT Go non offre i modelli richiesti, Z.AI ha la quota esaurita).
-Sono ostacoli dell'account, non del codice: quando il login è fatto o la
-quota torna, le righe si eseguono come sono scritte qui. Il giro di
-`bitbotd` contro un agente vero è stato fatto su Linux il 18 e il 20
-ottobre 2026.
+i sistemi in macchina virtuale, e la sera Codex e Cursor su Windows:
+le loro righe Windows sono fatte. Su macOS restano Cursor e Codex:
+nelle VM il login di Cursor passa da `agent login` interattivo (su
+Windows è stato completato con il link nel browser dell'utente) e Codex
+muore sul provider (l'account ChatGPT Go non offre i modelli richiesti;
+Z.AI la sera del 20 ottobre era di nuovo attivo). Sono ostacoli
+dell'account, non del codice: quando il login è fatto o la quota
+torna, le righe si eseguono come sono scritte qui. Il giro di `bitbotd`
+contro un agente vero è stato fatto su Linux il 18 e il 20 ottobre
+2026.
 
 I test automatici, senza agenti reali, coprono il resto:
 
@@ -92,6 +94,25 @@ nelle osservazioni: `Aggiungi un test unittest per la funzione somma in calcola.
 Il testo preciso dei prompt di ripresa non è archiviato: sotto c'è la
 forma del comando, con un compito di continuazione.
 
+## Rispondere ai permessi su Windows
+
+Da SSH lo spike rifiuta di rispondere ai permessi: `stdin non è un
+terminale`. Nemmeno `ssh -tt` basta: l'OpenSSH di Windows non dà una
+console al processo. Il metodo della sera del 20 ottobre 2026:
+
+1. un `.bat` con `title <nome>` all'inizio, che lancia lo spike e
+   scrive l'output su file, avviato da un task pianificato con
+   principal `Interactive` (`Register-ScheduledTask`): la finestra
+   console compare nella sessione utente;
+2. un secondo task, sempre `Interactive`, con uno script PowerShell
+   che ogni 5 secondi rilegge il file di output e, se l'ultima riga è
+   `permesso?`, attiva la finestra con `AppActivate('<nome>')` e
+   invia `si{ENTER}` con `SendKeys`.
+
+Il prompt accetta anche `si` senza accento. Chi guarda la console può
+rispondere a mano: la finestra è quella con il titolo scelto nel
+`.bat`.
+
 ## OpenCode
 
 Per vedere un permesso, come su Linux: variabile `OPENCODE_CONFIG` con
@@ -137,10 +158,10 @@ spike deve passare prima del primo prompt, è `default[]`.
 
 | Passo | macOS | Windows | Linux | macOS | Windows |
 | --- | --- | --- | --- | --- | --- |
-| Sessione nuova e prompt | `./target/debug/bitbot-spike --agent cursor --model 'default[]' "$REPO" "Aggiungi un test unittest per la funzione somma in calcola.py"` | `.\target\debug\bitbot-spike.exe --agent cursor --model 'default[]' $repo "Aggiungi un test unittest per la funzione somma in calcola.py"` | fatto il 16 ottobre senza `--model` (Cursor 2026.10.01, `docs/osservazioni-spike.md`). Il 18 ottobre il turno parte solo con `--model 'default[]'` | tentato il 20 ottobre: la CLI 2026.10.19 avvia l'ACP e rifiuta la sessione senza `agent login` | tentato il 20 ottobre: idem, `Authentication required` |
-| Permesso | stesso comando; rispondere `sì` a `permesso? [sì/no/sempre]` | stesso comando; rispondere `sì` | fatto il 16 ottobre per bash (`allow-once`). Una scrittura fuori dal progetto non ha chiesto permesso (punti aperti, stesso file) | non raggiunto il 20 ottobre (login assente) | non raggiunto il 20 ottobre (login assente) |
-| Cambio di modello | stesso processo: Cursor non ha `thought_level`, lo spike cambia l'opzione `model` | stesso processo | fatto il 16 ottobre (cambio `model` nel turno dopo). Il 18 ottobre un modello esplicito dopo `default[]` muore con il messaggio di pagamento | non raggiunto il 20 ottobre (login assente) | non raggiunto il 20 ottobre (login assente) |
-| Ripresa | `./target/debug/bitbot-spike --resume --agent cursor --model 'default[]' "$REPO" "Continua il compito precedente."` | `.\target\debug\bitbot-spike.exe --resume --agent cursor --model 'default[]' $repo "Continua il compito precedente."` | fatto il 16 ottobre via `session/load` con replay (lo spike non usa `session/resume`, che Cursor non dichiara). Testo del prompt non archiviato | non raggiunto il 20 ottobre (login assente) | non raggiunto il 20 ottobre (login assente) |
+| Sessione nuova e prompt | `./target/debug/bitbot-spike --agent cursor --model 'default[]' "$REPO" "Aggiungi un test unittest per la funzione somma in calcola.py"` | `.\target\debug\bitbot-spike.exe --agent cursor --model 'default[]' $repo "Aggiungi un test unittest per la funzione somma in calcola.py"` | fatto il 16 ottobre senza `--model` (Cursor 2026.10.01, `docs/osservazioni-spike.md`). Il 18 ottobre il turno parte solo con `--model 'default[]'` | tentato il 20 ottobre: la CLI 2026.10.19 avvia l'ACP e rifiuta la sessione senza `agent login` | fatto il 20 ottobre, sera, dopo il login completato con il link nel browser dell'utente: turno `finito`, permesso `py -m unittest` risposto `si`, `test_calcola.py` scritto |
+| Permesso | stesso comando; rispondere `sì` a `permesso? [sì/no/sempre]` | stesso comando; rispondere `sì` | fatto il 16 ottobre per bash (`allow-once`). Una scrittura fuori dal progetto non ha chiesto permesso (punti aperti, stesso file) | non raggiunto il 20 ottobre (login assente) | fatto il 20 ottobre, sera: `py -m unittest test_calcola.py -v` chiede, `si` sblocca il turno |
+| Cambio di modello | stesso processo: Cursor non ha `thought_level`, lo spike cambia l'opzione `model` | stesso processo | fatto il 16 ottobre (cambio `model` nel turno dopo). Il 18 ottobre un modello esplicito dopo `default[]` muore con il messaggio di pagamento | non raggiunto il 20 ottobre (login assente) | parziale il 20 ottobre, sera: cambio applicato (`muse-wonder-1.0[...]` → `gpt-5.6-sol[...]`) ma il turno di verifica chiude con «Add a payment method to continue»: il bug noto di fatturazione ACP, come su Linux il 18 |
+| Ripresa | `./target/debug/bitbot-spike --resume --agent cursor --model 'default[]' "$REPO" "Continua il compito precedente."` | `.\target\debug\bitbot-spike.exe --resume --agent cursor --model 'default[]' $repo "Continua il compito precedente."` | fatto il 16 ottobre via `session/load` con replay (lo spike non usa `session/resume`, che Cursor non dichiara). Testo del prompt non archiviato | non raggiunto il 20 ottobre (login assente) | fatto il 20 ottobre, sera: `--resume` riprende la sessione (il profilo Cursor passa da `session/load`), 6 permessi risposti `si` (tra cui `winget install Python`), turno `finito`, `risposta agente:` stampata |
 
 `cursor/ask_question` non è in tabella: su Linux non è scattata
 (`docs/osservazioni-spike.md`, punti aperti).
@@ -155,10 +176,10 @@ locale è già accettato da `codex-acp`.
 
 | Passo | macOS | Windows | Linux | macOS | Windows |
 | --- | --- | --- | --- | --- | --- |
-| Sessione nuova e prompt | `./target/debug/bitbot-spike --agent codex "$REPO" "Aggiungi un test unittest per la funzione somma in calcola.py"` | `.\target\debug\bitbot-spike.exe --agent codex $repo "Aggiungi un test unittest per la funzione somma in calcola.py"` | fatto il 16 ottobre (`codex-acp` 0.16.0, stesso file) | tentato il 20 ottobre: `codex-acp` parte, il turno muore sul provider (ChatGPT Go rifiuta `gpt-5.5` e `gpt-5.1-codex`) | tentato il 20 ottobre: idem; con Z.AI «Weekly/Monthly Limit Exhausted» |
-| Permesso | prima della corsa, in `~/.codex/config.toml`: `approval_policy = "on-request"` e `sandbox_mode = "workspace-write"` (fare una copia e ripristinare dopo). Poi lo stesso comando con un compito che scrive anche fuori dal repo, per esempio `"Scrivi report.txt nel progetto e un file fuori dal progetto."`. Rispondere `sì` | stessi passi, con il profilo utente di Windows al posto di `~/.codex` se Codex non usa la home Unix | fatto il 18 ottobre: la scrittura fuori dal progetto chiede `allow_once` con id `approved`. Letture e scritture interne no. L'opzione ACP `mode` non rispecchia la sandbox (stesso file, sezione del 18 ottobre) | non raggiunto il 20 ottobre (turno mai completato) | non raggiunto il 20 ottobre (turno mai completato) |
-| Cambio di effort | stesso processo della sessione nuova: `cambio thought_level` su `reasoning_effort` | stesso processo | fatto il 16 e il 18 ottobre (`high` → `xhigh` nel turno dopo). Alla ripresa l'opzione riletta torna `high` | non raggiunto il 20 ottobre (turno mai completato) | non raggiunto il 20 ottobre (turno mai completato) |
-| Ripresa | `./target/debug/bitbot-spike --resume --agent codex "$REPO" "Continua il compito precedente."` | `.\target\debug\bitbot-spike.exe --resume --agent codex $repo "Continua il compito precedente."` | fatto il 16 ottobre via `session/resume` senza replay. Lo spike non stampa la risposta finale di quel turno. Testo del prompt non archiviato | non raggiunto il 20 ottobre (nessuna sessione da riprendere) | non raggiunto il 20 ottobre (nessuna sessione da riprendere) |
+| Sessione nuova e prompt | `./target/debug/bitbot-spike --agent codex "$REPO" "Aggiungi un test unittest per la funzione somma in calcola.py"` | `.\target\debug\bitbot-spike.exe --agent codex $repo "Aggiungi un test unittest per la funzione somma in calcola.py"` | fatto il 16 ottobre (`codex-acp` 0.16.0, stesso file) | tentato il 20 ottobre: `codex-acp` parte, il turno muore sul provider (ChatGPT Go rifiuta `gpt-5.5` e `gpt-5.1-codex`) | fatto il 20 ottobre, sera: Z.AI di nuovo attivo, turno `finito` su `glm-5.3`, `test_calcola.py` aggiornato |
+| Permesso | prima della corsa, in `~/.codex/config.toml`: `approval_policy = "on-request"` e `sandbox_mode = "workspace-write"` (fare una copia e ripristinare dopo). Poi lo stesso comando con un compito che scrive anche fuori dal repo, per esempio `"Scrivi report.txt nel progetto e un file fuori dal progetto."`. Rispondere `sì` | stessi passi, con il profilo utente di Windows al posto di `~/.codex` se Codex non usa la home Unix | fatto il 18 ottobre: la scrittura fuori dal progetto chiede `allow_once` con id `approved`. Letture e scritture interne no. L'opzione ACP `mode` non rispecchia la sandbox (stesso file, sezione del 18 ottobre) | non raggiunto il 20 ottobre (turno mai completato) | fatto il 20 ottobre, sera: la corsa con `approval_policy = on-request` chiede per ogni comando PowerShell fuori dalla sandbox (letture fuori progetto, `apply_patch`, `Set-Content`), risposte `si`, turno `finito`, `report.txt` scritto. Serve la finestra interattiva: vedi «Rispondere ai permessi su Windows» |
+| Cambio di effort | stesso processo della sessione nuova: `cambio thought_level` su `reasoning_effort` | stesso processo | fatto il 16 e il 18 ottobre (`high` → `xhigh` nel turno dopo). Alla ripresa l'opzione riletta torna `high` | non raggiunto il 20 ottobre (turno mai completato) | fatto il 20 ottobre, sera: `high → xhigh`, turno di verifica `finito`. Prerequisito scoperto in questa corsa: `model_catalog_json` va in cima a `config.toml` (una riga sotto una sezione `[...]` appartiene a quella sezione e Codex non la legge) e `models.json` va copiato: senza catalogo lo spike cambia il modello (`gpt-5.5`) e Z.AI risponde «Unknown Model» |
+| Ripresa | `./target/debug/bitbot-spike --resume --agent codex "$REPO" "Continua il compito precedente."` | `.\target\debug\bitbot-spike.exe --resume --agent codex $repo "Continua il compito precedente."` | fatto il 16 ottobre via `session/resume` senza replay. Dal 20 ottobre 2026 lo spike stampa anche la risposta finale del turno di ripresa (PR #20, verificata su corsa reale). Testo del prompt non archiviato | non raggiunto il 20 ottobre (nessuna sessione da riprendere) | fatto il 20 ottobre, sera: `session/resume` senza replay, turno `finito`, `risposta agente:` stampata |
 
 ## `bitbotd` contro un agente reale
 
