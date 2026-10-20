@@ -491,7 +491,7 @@ Ordine consigliato: prima OpenCode e Cursor, che parlano ACP in modo nativo, cos
 
 ### Criterio di completamento
 
-- [x] Lo stesso codice pilota OpenCode, Cursor e Codex cambiando solo il comando d'avvio. Per Claude Code il codice distingue solo il comando di avvio (`claude-agent-acp`, senza ripiego): la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo»
+- [x] Lo stesso codice pilota OpenCode, Cursor e Codex cambiando solo il comando d'avvio. Le differenze stanno nel manifest per agente (`crates/bitbot-drivers/src/manifest.rs`) e nelle estensioni `cursor/*`, che Cursor invia di sua iniziativa (passo 9 dei passi sopra). Per Claude Code il codice distingue solo il comando di avvio (`claude-agent-acp`, senza ripiego): la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo»
 - [x] Per OpenCode, Cursor e Codex funzionano nuova sessione, prompt, permesso, cambio di modello ed effort, ripresa. Provato su Linux il 16 e il 18 ottobre 2026; su macOS e Windows solo OpenCode, il 20 ottobre 2026. Per Cursor l'effort non ha un'opzione dedicata: vive dentro il valore del modello
 - [x] Esiste una tabella delle differenze osservate tra gli agenti, che diventa il primo manifest per agente
 - [ ] Tutto funziona su macOS, Windows e Linux. Non spuntato: Cursor e Codex restano pilotati solo su Linux (nelle VM si fermano su `agent login` interattivo e sul provider senza quota), Hyprland, Sway e il notch vero restano senza prova visiva
