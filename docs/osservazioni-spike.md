@@ -176,12 +176,15 @@ dello X Subscription al 48% l'errore è identico.
   (19 ottobre 2026, test sul codice puro). Una corsa reale che mostri
   quella riga non è stata rifatta.
 
-Stato al 20 ottobre 2026: la fase 0 è chiusa con questi punti come
-limiti noti accettati, non come fatti. Restano da chiudere con una
-corsa vera quando le condizioni tornano: `cursor/ask_question`, il
-permesso di Cursor per la scrittura fuori dal progetto, le righe Cursor
-e Codex su macOS e Windows, e la riga `risposta agente:` nel turno di
-ripresa. Il cancello della fase 1 li riprende.
+Stato al 20 ottobre 2026, sera: la fase 0 resta chiusa con questi punti
+come limiti noti accettati, non come fatti. Chiusi stasera con corse
+vere: la riga `risposta agente:` del turno di ripresa (portatile e
+Windows) e le righe Cursor e Codex su Windows. Restano: le righe di
+macOS (Cursor: `agent login` interattivo; Codex: provider), il turno di
+verifica del cambio modello di Cursor, fermato dal bug di fatturazione
+ACP, `cursor/ask_question` — in attesa del fix di Cursor per la sessione
+ACP — e il permesso di Cursor per la scrittura fuori dal progetto. Il
+cancello della fase 1 li riprende.
 
 ## Verifica del 19 ottobre 2026: ripresa, domanda, scrittura fuori progetto
 
@@ -329,3 +332,54 @@ Xcode-14.2"`: l'estrazione dei pacchetti resta a CPU alta per venti
 minuti e sembra ferma, ma finisce. Remote Login si accende da Impostazioni
 di Sistema → Generali → Condivisione; da lì tutto il resto passa da
 SSH.
+
+## Corse del 20 ottobre 2026, sera: Codex e Cursor su Windows
+
+Sempre nella VM Windows 11, dopo il login di Cursor completato con il
+link `loginDeepControl` aperto nel browser dell'utente (la CLI stampa
+il link e attende: nessun browser nella VM). Z.AI, alla mattina con la
+quota esaurita, la sera rispondeva.
+
+### Codex
+
+- Il catalogo decide le opzioni dichiarate all'avvio. Senza
+  `models.json` copiato e senza `model_catalog_json` in cima a
+  `config.toml`, `codex-acp` dichiara solo `model` con i valori `[glm-5.3
+  gpt-5.5 gpt-5.4 …]`: lo spike cambia quindi il modello, `gpt-5.5`
+  non è servito da Z.AI e il turno muore con «Unknown Model».
+- Con `models.json` copiato e `model_catalog_json` in cima (una riga
+  messa dopo una sezione `[model_providers.ZAI]` appartiene a quella
+  sezione: Codex non la legge e il provider risulta senza nome), le
+  opzioni al via sono `model` con `valori=[glm-5.3]` e
+  `reasoning_effort` (`low high xhigh`): lo spike cambia `high →
+  xhigh` e il turno di verifica finisce.
+- Con `approval_policy = on-request` e sandbox `workspace-write`, ogni
+  comando PowerShell chiede permesso, anche le letture fuori dal
+  progetto: su Linux, il 18, chiedeva solo la scrittura fuori. Le
+  risposte `si` (allow_once) sbloccano il turno.
+- Ripresa: `session/resume` senza replay, risposta finale del turno
+  stampata (`risposta agente:`).
+
+### Cursor
+
+- Login completato via link nel browser: «Logged in», token salvati.
+  Con `--model 'default[]'` la sessione parte e il turno lavora: il
+  permesso per `py -m unittest test_calcola.py -v` arriva e la
+  risposta `si` sblocca.
+- Il cambio di modello è applicato (`muse-wonder-1.0[…]` →
+  `gpt-5.6-sol[…]`, il valore successivo dichiarato) ma il turno di
+  verifica chiude subito con «Add a payment method to continue»: il
+  bug noto di fatturazione ACP, già visto su Linux il 18.
+- Ripresa: il turno continua la sessione, sei permessi risposti (tra
+  cui `winget install Python`, proposto dall'agente per eseguire i
+  test), risposta finale stampata.
+- `cursor/ask_question` non è scattata nemmeno con il login attivo:
+  coerente con quanto scritto dal forum di Cursor, lo strumento non è
+  offerto dalla sessione ACP.
+
+### Metodo per i permessi
+
+Su Windows la risposta ai permessi passa da una finestra console
+interattiva avviata da task pianificato, con l'auto-risponditore
+PowerShell descritto in `docs/corse-sistemi.md`: da SSH lo spike
+rifiuta stdin non terminale e `ssh -tt` non basta.
