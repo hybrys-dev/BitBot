@@ -164,7 +164,11 @@ spike deve passare prima del primo prompt, è `default[]`.
 | Ripresa | `./target/debug/bitbot-spike --resume --agent cursor --model 'default[]' "$REPO" "Continua il compito precedente."` | `.\target\debug\bitbot-spike.exe --resume --agent cursor --model 'default[]' $repo "Continua il compito precedente."` | fatto il 16 ottobre via `session/load` con replay (lo spike non usa `session/resume`, che Cursor non dichiara). Testo del prompt non archiviato | non raggiunto il 20 ottobre (login assente) | fatto il 20 ottobre, sera: `--resume` riprende la sessione (il profilo Cursor passa da `session/load`), 6 permessi risposti `si` (tra cui `winget install Python`), turno `finito`, `risposta agente:` stampata |
 
 `cursor/ask_question` non è in tabella: su Linux non è scattata
-(`docs/osservazioni-spike.md`, punti aperti).
+(`docs/osservazioni-spike.md`, punti aperti). La notte del 20 ottobre
+2026, sulla VM Windows con login già fatto e CLI 2026.10.19, un compito
+che chiede esplicitamente lo strumento di domanda non ha prodotto il
+prompt `numero, oppure salta`: l'agente ha scritto che lo strumento non
+è disponibile in questa sessione.
 
 ## Codex
 
@@ -202,9 +206,9 @@ annullamento per client assente restano provati solo con l'agente finto.
 
 | Passo | macOS | Windows | Linux | macOS | Windows |
 | --- | --- | --- | --- | --- | --- |
-| Avvio | `./target/debug/bitbotd` | `.\target\debug\bitbotd.exe` | fatto il 18 e il 20 ottobre (`AGENTS.md`) | non fatto | non fatto |
-| `version` e `session/start` | vedi sotto | vedi sotto | fatto nelle stesse corse, fino a `finito` | non fatto | non fatto |
-| `session/respond` se arriva `session/request` | `outcome` `allow_once`, oppure `cancelled` | stesso JSON | fatto il 20 ottobre: due richieste di permesso (scrittura e comando), risposte `allow_once`. L'agente finto copre domanda, piano e `cancelled` | non fatto | non fatto |
+| Avvio | `./target/debug/bitbotd` | `.\target\debug\bitbotd.exe` | fatto il 18 e il 20 ottobre (`AGENTS.md`) | non fatto la notte del 20 ottobre 2026: la VM non risponde in rete (schermata di login, niente ARP) | fatto la notte del 20 ottobre 2026: named pipe, OpenCode 1.19.3 |
+| `version` e `session/start` | vedi sotto | vedi sotto | fatto nelle stesse corse, fino a `finito` | non fatto (guest irraggiungibile) | fatto: `version` 0.1.0, sessione `s-1` fino a `finito` |
+| `session/respond` se arriva `session/request` | `outcome` `allow_once`, oppure `cancelled` | stesso JSON | fatto il 20 ottobre: due richieste di permesso (scrittura e comando), risposte `allow_once`. L'agente finto copre domanda, piano e `cancelled` | non fatto (guest irraggiungibile) | fatto: due `session/request` (scrittura `test_calcola.py` +18 −0, opzioni `once` / `always` / `reject`, e `python -m unittest test_calcola -v`), risposte `allow_once`. Una sessione precedente, stesso comando, è finita senza richieste. I 3 test rilanciati a mano passano. Domanda e piano non sono arrivati |
 
 macOS, in un altro terminale, con `BITBOT_SOCK` copiato dalla riga di
 avvio e `BITBOT_REPO` uguale a `$REPO`:

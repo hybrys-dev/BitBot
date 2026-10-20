@@ -383,3 +383,56 @@ Su Windows la risposta ai permessi passa da una finestra console
 interattiva avviata da task pianificato, con l'auto-risponditore
 PowerShell descritto in `docs/corse-sistemi.md`: da SSH lo spike
 rifiuta stdin non terminale e `ssh -tt` non basta.
+
+## Verifica del 20 ottobre 2026, notte
+
+### `bitbotd` su Windows
+
+VM Windows 11, binario già compilato in `C:\BitBot`, OpenCode 1.19.3,
+`OPENCODE_CONFIG` con `edit` e `bash` a `ask`. Il demone ascolta sulla
+named pipe e risponde a `version` con `bitbotd` 0.1.0.
+
+- Prima sessione, stesso prompt delle corse precedenti: da `avvio` a
+  `finito` senza strumenti e senza `session/request`. Il file di test
+  non c'è.
+- Seconda sessione, stesso comando: due `session/request`. La scrittura
+  di `test_calcola.py` (+18 −0) con opzioni `once`, `always` e
+  `reject`; poi `python -m unittest test_calcola -v`. Entrambe le
+  risposte `allow_once`. Stato finale `finito`. `py -m unittest
+  test_calcola -v` rilanciato a mano: 3 test, OK.
+- Domanda e piano non sono arrivati.
+
+### `bitbotd`, Codex e Cursor su macOS
+
+Non eseguiti. La VM 173 è accesa, alla schermata di login dell'utente
+`hybrys`, e non è in rete: niente ARP su 192.168.0.173, la porta 22 non
+risponde. La scheda resta `vmxnet3`. Non è stata cambiata: il 20 ottobre,
+di sera, `e1000-82545em` mandava il guest in panic. Il guest agent è
+spento (`agent: enabled=0`). Il notch non si vede: la VM non lo ha, e
+questa sera non si è nemmeno aperta una sessione grafica oltre il login.
+
+### `cursor/ask_question` su Windows
+
+CLI 2026.10.19-6bbf2c4, login già presente (la sessione ACP parte, non
+chiede `agent login`). Compito: usare lo strumento di domanda
+all'utente prima di scrivere il test, senza mettere la domanda nel
+messaggio. Un permesso (`python -m unittest`) è arrivato ed è stato
+risposto `si` dalla finestra interattiva.
+
+Lo strumento non è scattato. Nel log non c'è `numero, oppure salta` né
+una riga `cursor/ask_question:` di errore del client. L'agente scrive
+che lo strumento di domanda non è disponibile in questa sessione, e nel
+turno di verifica (modello successivo dichiarato,
+`grok-4.7[context=256k,reasoning_effort=high,fast=true]`) ripete la
+domanda nel messaggio. Quel turno arriva a `finito` e lo spike stampa
+`verifica: il turno successivo usa model=grok-4.7[…]`. Non compare
+«Add a payment method to continue»: il modello di questa corsa non è
+quello della sera (`gpt-5.6-sol`), quindi il bug di fatturazione non si
+dà per chiuso.
+
+### Hyprland
+
+Su `bitbot-linx` (Fedora 44) `dnf list hyprland` risponde `No matches
+found`. `rpm` non lo ha installato. I repo abilitati sono fedora,
+fedora-cisco-openh264 e updates. Il copr rawhide non è stato attivato
+e non è stato installato nulla. Resta senza prova visiva.

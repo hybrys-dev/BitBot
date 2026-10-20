@@ -49,7 +49,7 @@ Hyprland non è stato provato: su Fedora 44 non è pacchettizzato e il copr che 
 
 - Il notch del Mac: la VM Ventura non ne ha, e il posizionamento attorno al notch resta non verificato.
 - Il ritiro negli spazi a schermo intero su macOS e il ritiro su Windows a schermo intero: la finestra è stata vista, il comportamento no.
-- Hyprland: su Fedora 44 non è pacchettizzato e il copr esistente builda solo rawhide (20 ottobre 2026). Resta senza prova visiva.
+- Hyprland: su Fedora 44 non è pacchettizzato e il copr esistente builda solo rawhide (20 ottobre 2026). La notte dello stesso giorno il controllo è stato ripetuto: `dnf list hyprland` non trova il pacchetto, i repo abilitati sono fedora, openh264 e updates, il pacchetto non è installato. Il copr non è stato attivato. Resta senza prova visiva.
 - Un compositor in cui la finestra X11 resti davvero sul bordo fisico, sopra un pannello.
 - Un clic che attraversa gli angoli trasparenti.
 - L'aspetto a schermo intero, oltre allo stato unmapped descritto sopra.
