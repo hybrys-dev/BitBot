@@ -3,12 +3,18 @@
 Il criterio «tutto funziona su macOS, Windows e Linux» dello spike in
 `docs/PLAN.md` non è spuntato. La CI (`.github/workflows/ci.yml`) esegue
 `cargo fmt`, clippy e `cargo test` su `ubuntu-latest`, `macos-latest` e
-`windows-latest`. Non avvia agenti. Le corse reali ACP e il giro di
-`bitbotd` contro un agente vero sono stati fatti solo su Linux.
+`windows-latest`. Non avvia agenti.
 
 Questo file è la lista da eseguire a mano. Ogni riga dice dove è già
-stata fatta. macOS e Windows restano da fare: nessuno di questi comandi
-è stato lanciato su quelle macchine da chi ha scritto il file.
+stata fatta. Il 20 ottobre 2026 OpenCode è stato pilotato su tutti e tre
+i sistemi, in macchina virtuale: le sue righe macOS e Windows sono
+fatte. Cursor e Codex restano pilotati solo su Linux: nelle VM Cursor
+chiede un `agent login` interattivo e Codex muore sul provider (l'account
+ChatGPT Go non offre i modelli richiesti, Z.AI ha la quota esaurita).
+Sono ostacoli dell'account, non del codice: quando il login è fatto o la
+quota torna, le righe si eseguono come sono scritte qui. Il giro di
+`bitbotd` contro un agente vero è stato fatto su Linux il 18 e il 20
+ottobre 2026.
 
 I test automatici, senza agenti reali, coprono il resto:
 
@@ -113,7 +119,8 @@ $env:OPENCODE_CONFIG = Join-Path $repo "opencode.json"
 Se la versione installata rifiuta la chiave `permission`, la
 documentazione di OpenCode 2 usa `permissions` con l'azione `shell` al
 posto di `bash`. Va adattato prima di leggere il risultato: non è stato
-riverificato qui.
+riverificato qui. Con OpenCode 2.0.24, il 20 ottobre 2026, lo schema
+qui sopra è stato accettato e i permessi sono arrivati.
 
 | Passo | macOS | Windows | Linux | macOS | Windows |
 | --- | --- | --- | --- | --- | --- |
@@ -162,14 +169,21 @@ Il client usa quella stringa, non un percorso fisso.
 
 Linux, 18 ottobre 2026, è registrato in `AGENTS.md` (non in
 `docs/osservazioni-spike.md`): OpenCode 2.0.32 da `avvio` a `finito`,
-test unittest generato passato, nessuna `session/request`. Permessi,
-domande e piani del demone restano provati solo con l'agente finto.
+test unittest generato passato, nessuna `session/request`.
+
+Linux, 20 ottobre 2026, sul portatile CachyOS, con OpenCode 2.0.24 e
+`OPENCODE_CONFIG` con `permission` a `ask` su `edit` e `bash`: da
+`avvio` a `finito`, test unittest generato passato e **due
+`session/request` vere**, la scrittura di `test_calcola.py` (+18 −0) e il
+comando `python3 -m unittest test_calcola -v`, con le opzioni `once`,
+`always` e `reject`. Risposte entrambe con `allow_once`. Domande, piani e
+annullamento per client assente restano provati solo con l'agente finto.
 
 | Passo | macOS | Windows | Linux | macOS | Windows |
 | --- | --- | --- | --- | --- | --- |
-| Avvio | `./target/debug/bitbotd` | `.\target\debug\bitbotd.exe` | fatto il 18 ottobre (`AGENTS.md`) | non fatto | non fatto |
-| `version` e `session/start` | vedi sotto | vedi sotto | fatto nella stessa corsa, fino a `finito` | non fatto | non fatto |
-| `session/respond` se arriva `session/request` | `outcome` `allow_once`, oppure `cancelled` | stesso JSON | non arrivata in quella corsa. L'agente finto copre permesso, domanda, piano e `cancelled` | non fatto | non fatto |
+| Avvio | `./target/debug/bitbotd` | `.\target\debug\bitbotd.exe` | fatto il 18 e il 20 ottobre (`AGENTS.md`) | non fatto | non fatto |
+| `version` e `session/start` | vedi sotto | vedi sotto | fatto nelle stesse corse, fino a `finito` | non fatto | non fatto |
+| `session/respond` se arriva `session/request` | `outcome` `allow_once`, oppure `cancelled` | stesso JSON | fatto il 20 ottobre: due richieste di permesso (scrittura e comando), risposte `allow_once`. L'agente finto copre domanda, piano e `cancelled` | non fatto | non fatto |
 
 macOS, in un altro terminale, con `BITBOT_SOCK` copiato dalla riga di
 avvio e `BITBOT_REPO` uguale a `$REPO`:

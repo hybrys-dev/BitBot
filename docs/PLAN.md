@@ -1,6 +1,6 @@
 # BitBot — Piano di progetto
 
-Ultimo aggiornamento: 15 ottobre 2026.
+Ultimo aggiornamento: 20 ottobre 2026.
 
 > Documento di riferimento del progetto, per persone e agenti. La fase in corso è indicata in `AGENTS.md`.
 
@@ -407,7 +407,7 @@ Sei fasi senza stime di tempo. Ognuna si chiude con un cancello verificabile, e 
 
 - Spike ACP sui quattro agenti, spike dell'isola sui tre sistemi, API locale del demone. Per Claude Code il codice distingue solo il comando di avvio; la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo». L'abbonamento resta il terminale gestito e gli hook, già previsti dopo.
 - Repository e CI su macOS, Windows e Linux, verifica che il nome BitBot sia libero (fatta il 19 ottobre 2026: esito in `docs/nome-bitbot.md`; nessun conflitto nei developer tool, ma nome pubblico, dominio e pacchetto npm da scegliere prima dell'uscita open source).
-- **Cancello**: lo spike pilota OpenCode, Cursor e Codex e l'isola appare bene su ogni sistema. La corsa ACP di Claude Code non fa parte di questo cancello. Al 20 ottobre 2026, in VM: l'isola si vede su macOS Ventura, Windows 11 e Fedora 44 GNOME, e lo spike pilota OpenCode su tutti e tre (sessione, turno, permesso, cambio di configurazione, ripresa: `docs/corse-sistemi.md`). Cursor e Codex restano pilotati solo su Linux: sulle VM Cursor chiede un `agent login` interattivo e Codex muore sul provider (l'account ChatGPT Go non offre i modelli richiesti, Z.AI ha la quota esaurita). Il notch del Mac non si verifica in VM, e Hyprland e Plasma restano senza prova visiva. **La fase 0 resta aperta.**
+- **Cancello**: lo spike pilota OpenCode, Cursor e Codex e l'isola appare bene su ogni sistema. La corsa ACP di Claude Code non fa parte di questo cancello. Al 20 ottobre 2026, in VM: l'isola si vede su macOS Ventura, Windows 11 e Fedora 44 GNOME, e lo spike pilota OpenCode su tutti e tre (sessione, turno, permesso, cambio di configurazione, ripresa: `docs/corse-sistemi.md`). Cursor e Codex restano pilotati solo su Linux: sulle VM Cursor chiede un `agent login` interattivo e Codex muore sul provider (l'account ChatGPT Go non offre i modelli richiesti, Z.AI ha la quota esaurita). Il notch del Mac non si verifica in VM, e Hyprland e Plasma restano senza prova visiva. **La fase 0 è chiusa il 20 ottobre 2026**: il criterio dei tre sistemi resta non spuntato e i residui sono accettati come limiti noti, non come fatti. Sono elencati in `AGENTS.md` e li riprende il cancello della fase 1.
 
 ### Fase 1 · MVP
 
@@ -491,12 +491,12 @@ Ordine consigliato: prima OpenCode e Cursor, che parlano ACP in modo nativo, cos
 
 ### Criterio di completamento
 
-- [ ] Lo stesso codice pilota OpenCode, Cursor e Codex cambiando solo il comando d'avvio. Per Claude Code il codice distingue solo il comando di avvio (`claude-agent-acp`, senza ripiego): la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo»
-- [ ] Per OpenCode, Cursor e Codex funzionano nuova sessione, prompt, permesso, cambio di modello ed effort, ripresa
+- [x] Lo stesso codice pilota OpenCode, Cursor e Codex cambiando solo il comando d'avvio. Per Claude Code il codice distingue solo il comando di avvio (`claude-agent-acp`, senza ripiego): la corsa reale ACP è esclusa da questa fase per la scelta «nessuna API a consumo»
+- [x] Per OpenCode, Cursor e Codex funzionano nuova sessione, prompt, permesso, cambio di modello ed effort, ripresa. Provato su Linux il 16 e il 18 ottobre 2026; su macOS e Windows solo OpenCode, il 20 ottobre 2026. Per Cursor l'effort non ha un'opzione dedicata: vive dentro il valore del modello
 - [x] Esiste una tabella delle differenze osservate tra gli agenti, che diventa il primo manifest per agente
-- [ ] Tutto funziona su macOS, Windows e Linux
+- [ ] Tutto funziona su macOS, Windows e Linux. Non spuntato: Cursor e Codex restano pilotati solo su Linux (nelle VM si fermano su `agent login` interattivo e sul provider senza quota), Hyprland, Sway e il notch vero restano senza prova visiva
 
-La fase 0 resta aperta. Il manifest di Claude resta «non osservato», senza effort né permessi inventati. L'abbonamento resta il terminale gestito e gli hook, già previsti dopo.
+La fase 0 è chiusa il 20 ottobre 2026 con il criterio dei tre sistemi non spuntato: quei residui sono limiti noti accettati, non fatti, e li riprende il cancello della fase 1. Il manifest di Claude resta «non osservato», senza effort né permessi inventati. L'abbonamento resta il terminale gestito e gli hook, già previsti dopo.
 
 ## Fonti
 
