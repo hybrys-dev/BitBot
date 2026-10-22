@@ -3,12 +3,16 @@ name = "bitbot-desktop"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Guscio Tauri dell'isola, spike della fase 0"
+description = "Guscio Tauri dell'isola"
 
 [dependencies]
 anyhow = "1"
+bitbot-core = { path = "../../../crates/bitbot-core" }
+bitbot-protocol = { path = "../../../crates/bitbot-protocol" }
+interprocess = { version = "2", features = ["tokio"] }
 serde_json = "1"
 tauri = { version = "2", features = ["macos-private-api"] }
+tokio = { version = "1", features = ["io-util", "macros", "rt-multi-thread", "sync", "time"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

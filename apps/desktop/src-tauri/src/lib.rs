@@ -1,28 +1,80 @@
 //! Guscio dell'isola: una finestra trasparente in cima allo schermo.
-//! Lo spike non disegna Bit, pillole o cockpit.
+//! La pillola mostra la riga di stato del demone. Non disegna Bit, schede o cockpit.
 
 mod compositor;
+mod daemon_link;
 mod fullscreen;
 mod geometry;
+mod pill;
 mod platform;
 mod session;
 
+use std::sync::{Arc, Mutex};
+
 use anyhow::Context;
-use tauri::{Manager, Runtime, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, Runtime, WebviewWindowBuilder};
 
 #[cfg(not(target_os = "macos"))]
 use tauri::{LogicalPosition, LogicalSize, WebviewUrl, WebviewWindow};
 
 pub(crate) const WINDOW_LABEL: &str = "island";
 
+/// Ultima riga mostrata. Il comando `pill_label` la legge all'avvio della pagina,
+/// gli eventi `pill-label` la aggiornano dopo.
+#[derive(Clone)]
+struct PillText(Arc<Mutex<String>>);
+
+impl PillText {
+    fn new() -> Self {
+        Self(Arc::new(Mutex::new(pill::REST_LABEL.to_string())))
+    }
+
+    fn set(&self, label: &str) {
+        *self.0.lock().unwrap_or_else(|error| error.into_inner()) = label.to_string();
+    }
+
+    fn get(&self) -> String {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+    }
+}
+
+#[tauri::command]
+fn pill_label(state: tauri::State<'_, PillText>) -> String {
+    state.get()
+}
+
 pub fn run() -> anyhow::Result<()> {
     platform::prepare();
-    let builder = tauri::Builder::default();
+    let pill_text = PillText::new();
+    let pill_for_page = pill_text.clone();
+    let pill_for_watch = pill_text.clone();
+    let builder = tauri::Builder::default().manage(pill_text);
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
     builder
-        .setup(|app| {
+        .invoke_handler(tauri::generate_handler![pill_label])
+        .on_page_load(move |webview, payload| {
+            if payload.event() != tauri::webview::PageLoadEvent::Finished {
+                return;
+            }
+            let _ = webview.emit(pill::PILL_EVENT, pill_for_page.get());
+        })
+        .setup(move |app| {
             platform::open(app)?;
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                daemon_link::watch(
+                    bitbot_core::socket::SocketEndpoint::default_endpoint(),
+                    move |text| {
+                        pill_for_watch.set(text);
+                        let _ = handle.emit(pill::PILL_EVENT, text.to_string());
+                    },
+                )
+                .await;
+            });
             Ok(())
         })
         .run(tauri::generate_context!())

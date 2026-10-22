@@ -260,9 +260,12 @@ name = "bitbot-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bitbot-core",
+ "bitbot-protocol",
  "cairo-rs",
  "gtk",
  "gtk-layer-shell",
+ "interprocess",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
@@ -271,6 +274,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-nspanel",
+ "tokio",
 ]
 
 [[package]]
