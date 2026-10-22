@@ -40,4 +40,5 @@ cargo test --workspace
 - Un compito per volta, in un branch e in una PR dedicati. Parti da `main` e apri la PR verso `main`: niente PR impilate.
 - Fai solo il compito richiesto: niente refactor o dipendenze non discusse. Se una decisione non è nel piano, fermati e chiedi.
 - Nel corpo della PR spunta solo le verifiche eseguite davvero e scrivi in chiaro cosa non hai potuto verificare (agente reale, altri sistemi operativi).
+- Le VM di prova (171 `bitbot-linx` Fedora 44, 172 `bitbot-win` Windows 11, 173 `bitbot-macos` Ventura) si raggiungono in SSH su `192.168.0.171`–`.173` dalla LAN e si gestiscono con `mcp2cli @proxmox` (token di questa macchina in `~/.config/homelab/pve.env`). Procedure di corsa in `docs/corse-sistemi.md`, regole generali degli agenti in `~/AGENTS.md`.
 - Commenti di documentazione, messaggi per l'utente, commit e PR in italiano; identificatori e nomi dei test in inglese.
