@@ -116,6 +116,7 @@ mod tests {
     use bitbot_core::socket::SocketEndpoint;
     use bitbot_protocol::{Action, AgentState, SessionEventParams, Status, SESSION_EVENT_METHOD};
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    #[cfg(unix)]
     use tokio::sync::oneshot;
 
     use super::*;
