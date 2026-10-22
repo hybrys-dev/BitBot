@@ -14,9 +14,11 @@ body {
   border-radius: 999px;
   background: rgba(28, 28, 30, 0.92);
   color: #f5f5f7;
-  font: 13px/1 sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font: 13px/36px sans-serif;
+  padding: 0 14px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   user-select: none;
 }

@@ -1,5 +1,5 @@
 {
   "identifier": "default",
   "windows": ["island"],
-  "permissions": []
+  "permissions": ["core:event:allow-listen", "allow-pill-label"]
 }
